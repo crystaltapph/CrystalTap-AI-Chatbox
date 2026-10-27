@@ -6,7 +6,7 @@ import secrets
 import subprocess
 
 os.chdir(Path(__file__).resolve().parents[1])
-artifact=Path('dist/crystaltap-ai-chatbox-0.1.0.zip')
+artifact=Path('dist/crystaltap-ai-chatbox-0.1.1.zip')
 if not artifact.is_file():raise SystemExit('Build the release ZIP first.')
 artifact.parent.chmod(0o755)
 artifact.chmod(0o644)
@@ -24,7 +24,7 @@ cleanup() {
   wp eval 'global $wpdb;$p=getenv("CTAI_ZIP_TEST_PREFIX");foreach($wpdb->get_col($wpdb->prepare("SHOW TABLES LIKE %s",$wpdb->esc_like($p)."%"))as$t){$wpdb->query("DROP TABLE `".$t."`");}'
 }
 trap cleanup EXIT
-wp plugin install /var/www/html/wp-content/plugins/crystaltap-ai-chatbox/dist/crystaltap-ai-chatbox-0.1.0.zip --activate
+wp plugin install /var/www/html/wp-content/plugins/crystaltap-ai-chatbox/dist/crystaltap-ai-chatbox-0.1.1.zip --activate
 wp plugin is-active crystaltap-ai-chatbox
 wp eval 'global $wpdb;$n=count($wpdb->get_col($wpdb->prepare("SHOW TABLES LIKE %s",$wpdb->esc_like($wpdb->prefix."crystaltap_ai_")."%")));if($n!==17||!class_exists("Minishlink\\WebPush\\WebPush")){throw new Exception("ZIP dependencies or tables missing");}echo "PACKAGE_SMOKE_OK\n";'
 '''

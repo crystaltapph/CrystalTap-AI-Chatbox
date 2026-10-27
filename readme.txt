@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,9 @@ Browser/OS installation and push support vary. Physical-device testing is requir
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.1.1 =
+Distinguish OpenAI billing/quota errors from temporary rate limits without exposing provider messages or retrying exhausted quota.
 
 = 0.1.0 =
 Initial development candidate with shared backend, customer widget, agent workspace and PWA infrastructure.

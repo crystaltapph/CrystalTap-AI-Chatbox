@@ -74,6 +74,26 @@ try {
     // A deterministic provider tests the complete orchestration without consuming external API credit.
     if(!defined('CTAI_OPENAI_KEY'))define('CTAI_OPENAI_KEY','test-placeholder-not-a-real-key');
     Settings::save(['ai_enabled'=>true]);
+    $httpCalls = 0; $errorBody = ['error'=>['code'=>'insufficient_quota','message'=>'PRIVATE_PROVIDER_MESSAGE_DO_NOT_DISPLAY']];
+    $httpStub = static function($pre,$args,$url)use(&$httpCalls,&$errorBody){
+        if($url!=='https://api.openai.com/v1/responses')return $pre;
+        $httpCalls++;
+        return ['headers'=>[],'body'=>wp_json_encode($errorBody),'response'=>['code'=>429,'message'=>'Too Many Requests'],'cookies'=>[]];
+    };
+    add_filter('pre_http_request',$httpStub,10,3);
+    $retryOverride=static fn($s)=>array_replace($s,['retry_limit'=>1]);add_filter('ctai_settings',$retryOverride);
+    try {
+        try {(new CrystalTap\ResponsesProvider())->generate(['model'=>'gpt-4.1-mini'],5);throw new RuntimeException('Quota rejection expected');}
+        catch(Fault $e){check($e->slug==='ai_quota'&&str_contains($e->getMessage(),'billing'),'provider quota error gives actionable billing guidance');check(!str_contains($e->getMessage(),'PRIVATE_PROVIDER_MESSAGE'),'provider error text is never exposed');}
+        check($httpCalls===1,'quota errors are not retried');
+        $errorBody=['error'=>['code'=>'rate_limit_exceeded','message'=>'PRIVATE_PROVIDER_MESSAGE_DO_NOT_DISPLAY']];$httpCalls=0;
+        try {(new CrystalTap\ResponsesProvider())->generate(['model'=>'gpt-4.1-mini'],5);throw new RuntimeException('Rate rejection expected');}
+        catch(Fault $e){check($e->slug==='ai_rate_limit'&&$e->status===429,'temporary rate limits are distinct from quota errors');}
+        check($httpCalls===2,'temporary rate limits keep the configured retry bound');
+        $errorBody=['error'=>['message'=>'PRIVATE_PROVIDER_MESSAGE_DO_NOT_DISPLAY']];
+        try {(new CrystalTap\ResponsesProvider())->generate(['model'=>'gpt-4.1-mini'],5,1);throw new RuntimeException('Generic rejection expected');}
+        catch(Fault $e){check($e->slug==='ai_provider_limit'&&!str_contains($e->getMessage(),'PRIVATE_PROVIDER_MESSAGE'),'unclassified 429 has safe quota and rate-limit guidance');}
+    } finally {remove_filter('pre_http_request',$httpStub,10);remove_filter('ctai_settings',$retryOverride);}
     $provider = new class implements CrystalTap\StreamingAIProvider {
         public bool $takeover = false;
         public function generate(array $body,int $timeout): array {
