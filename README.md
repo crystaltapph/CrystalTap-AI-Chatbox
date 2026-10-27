@@ -4,6 +4,13 @@ Standalone WordPress plugin with a public customer widget, WordPress support das
 
 No Chatway, RO Shop, WooCommerce, theme, external database, or hosted messaging dependency is required. OpenAI calls are server-side; human support works while AI is disabled.
 
+## Install on WordPress
+
+Use the packaged `crystaltap-ai-chatbox-0.1.1.zip`, which includes production dependencies. **GitHub → Code → Download ZIP is a source archive and does not include the required Web Push library.** To build an installable package from source, follow the development and packaging commands below.
+
+If the source archive is already installed, back up the site, deactivate that copy, then upload and activate the packaged plugin. Accept WordPress's replacement prompt when offered. If WordPress creates a separate entry because the source folder has a different name, leave the source copy deactivated; keep only one CrystalTap copy active. Plugin-owned settings and tables are retained on deactivation.
+
+
 ## Develop locally
 
 Requirements: Docker with Compose, Python 3, Node 20+ and npm. PHP, MariaDB and WordPress run in containers. The local HTTP binding is restricted to loopback. Production requires HTTPS.

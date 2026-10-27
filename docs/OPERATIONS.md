@@ -6,7 +6,7 @@ This candidate has been exercised locally, not deployed to crystaltapwater.com. 
 
 1. Back up WordPress files, database and encryption configuration. Confirm a tested restore path.
 2. Verify single-site WordPress 6.6+, PHP 8.2+, InnoDB, curl, mbstring, openssl and HTTPS. The local test target is WordPress 7.1.3, PHP 8.3 and MariaDB 10.11; other combinations remain release-matrix work.
-3. Build the ZIP from locked dependencies and verify `dist/SHA256SUMS` after transfer.
+3. Build the ZIP from locked dependencies and verify `dist/SHA256SUMS` after transfer. Do not install GitHub’s Code → Download ZIP source archive: vendor dependencies are intentionally untracked. The packaged ZIP must include vendor/autoload.php and the Web Push library. If replacing an installed source copy, deactivate it before activating the packaged version; different folder names can otherwise leave duplicate plugins.
 4. Install on a staging copy without required companion plugins. Confirm activation/migrations and existing functionality.
 5. Configure actual business information, approval sources, products, water-treatment guidance, delivery/installation policies and support hours. No invented catalog is included.
 6. Confirm the privacy notice and retention policy with the business. Configure approved agent access and a monitored support queue.
