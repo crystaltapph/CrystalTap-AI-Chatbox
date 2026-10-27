@@ -6,7 +6,7 @@ No Chatway, RO Shop, WooCommerce, theme, external database, or hosted messaging 
 
 ## Install on WordPress
 
-Use the packaged `crystaltap-ai-chatbox-0.1.1.zip`, which includes production dependencies. **GitHub → Code → Download ZIP is a source archive and does not include the required Web Push library.** To build an installable package from source, follow the development and packaging commands below.
+Use the packaged `crystaltap-ai-chatbox-0.1.2.zip`, which includes production dependencies. Starting with **0.1.2**, GitHub → Code → Download ZIP also includes the production libraries. Older GitHub source archives omitted them. Check `plugin_version` and `push_diagnostic` under CrystalTap Settings → Environment health when diagnosing an installation. To build an installable package from source, follow the development and packaging commands below.
 
 If the source archive is already installed, back up the site, deactivate that copy, then upload and activate the packaged plugin. Accept WordPress's replacement prompt when offered. If WordPress creates a separate entry because the source folder has a different name, leave the source copy deactivated; keep only one CrystalTap copy active. Plugin-owned settings and tables are retained on deactivation.
 

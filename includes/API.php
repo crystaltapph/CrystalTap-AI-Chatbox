@@ -106,7 +106,7 @@ final class API {
             }
             return $prefs;
         });
-        self::route('/agent/push-config', 'GET', static fn() => ['publicKey' => Settings::get()['vapid_public'], 'available' => class_exists(\Minishlink\WebPush\WebPush::class) && (bool) Settings::secret('vapid_private')]);
+        self::route('/agent/push-config', 'GET', static fn() => ['publicKey' => Settings::get()['vapid_public'], 'available' => Dependencies::pushStatus()['ready'] && (bool) Settings::secret('vapid_private')]);
         self::route('/agent/devices', 'POST', static function ($r) { Auth::rate('devices', 10, 3600, (string) get_current_user_id()); return Push::register(get_current_user_id(), self::input($r)); });
         self::route('/agent/devices', 'GET', static function () { global $wpdb; return $wpdb->get_results($wpdb->prepare('SELECT id,created_at FROM ' . DB::table('push_subscriptions') . ' WHERE user_id=%d ORDER BY id DESC', get_current_user_id()), ARRAY_A); });
         self::route('/agent/devices/(?P<id>\d+)', 'DELETE', static function ($r) { global $wpdb; $wpdb->delete(DB::table('push_subscriptions'), ['id' => (int) $r['id'], 'user_id' => get_current_user_id()]); DB::audit('device_revoked', (int) $r['id']); return ['revoked' => true]; });
@@ -139,7 +139,10 @@ final class API {
             }
             return $result;
         }, 'supervise');
-        self::route('/admin/health', 'GET', static fn() => ['https' => is_ssl(), 'openai_key_configured' => (bool) Settings::secret('openai_key'), 'vapid_private_configured' => (bool) Settings::secret('vapid_private'), 'push_library' => class_exists(\Minishlink\WebPush\WebPush::class), 'last_worker' => (int) get_option('ctai_last_tick'), 'schema' => get_option('ctai_schema'), 'php' => PHP_VERSION, 'cron_note' => 'Configure a real cron every minute for timely notifications.'], 'manage');
+        self::route('/admin/health', 'GET', static function () {
+            $push = Dependencies::pushStatus();
+            return ['plugin_version' => CTAI_VERSION, 'plugin_directory' => basename(CTAI_DIR), 'https' => is_ssl(), 'openai_key_configured' => (bool) Settings::secret('openai_key'), 'vapid_private_configured' => (bool) Settings::secret('vapid_private'), 'push_library' => $push['sender_class'], 'push_vapid_class' => $push['vapid_class'], 'push_ready' => $push['ready'], 'push_diagnostic' => $push['issue'], 'push_missing_extensions' => implode(', ', $push['missing_extensions']) ?: 'None', 'last_worker' => (int) get_option('ctai_last_tick'), 'schema' => get_option('ctai_schema'), 'php' => PHP_VERSION, 'cron_note' => 'Configure a real cron every minute for timely notifications.'];
+        }, 'manage');
         self::route('/admin/credentials', 'PUT', static function ($r) {
             if (!is_ssl() && !in_array(wp_parse_url(home_url(), PHP_URL_HOST), ['localhost','127.0.0.1'], true)) { throw new Fault('HTTPS is required', 403); }
             $b = self::input($r);
@@ -148,7 +151,8 @@ final class API {
         }, 'manage');
         self::route('/admin/vapid-generate', 'POST', static function () {
             if ((defined('CTAI_VAPID_PRIVATE') && constant('CTAI_VAPID_PRIVATE')) || getenv('CTAI_VAPID_PRIVATE')) { throw new Fault('The private VAPID key is configured externally. Configure its matching public key instead of generating a replacement.', 409); }
-            if (!class_exists(\Minishlink\WebPush\VAPID::class)) { throw new Fault('Web Push library is unavailable', 503); }
+            $push = Dependencies::pushStatus();
+            if (!$push['ready']) { throw new Fault($push['issue'], 503, 'push_dependencies'); }
             $keys = \Minishlink\WebPush\VAPID::createVapidKeys();
             Settings::storeSecret('vapid_private', $keys['privateKey']);
             Settings::save(['vapid_public' => $keys['publicKey'], 'vapid_subject' => 'mailto:' . sanitize_email(get_option('admin_email'))]);

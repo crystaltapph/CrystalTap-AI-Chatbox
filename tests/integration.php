@@ -14,6 +14,11 @@ try {
     DB::migrate();
     check(count($wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($prefix) . '%'))) === 17, '17 isolated plugin tables created');
     DB::migrate(); check($wpdb->last_error === '', 'schema migration is repeatable');
+    $pushHealth=CrystalTap\Dependencies::pushStatus();
+    check($pushHealth['ready']&&$pushHealth['vapid_class']&&$pushHealth['sender_class'],'installed push dependency files, classes and extensions are ready');
+    $missingHealth=CrystalTap\Dependencies::pushStatus('/nonexistent-ctai-fixture/');
+    check(!$missingHealth['ready']&&count($missingHealth['missing_files'])===3,'missing push files produce a specific installation diagnosis');
+    check(!str_contains($missingHealth['issue'],'/nonexistent-ctai-fixture/'),'dependency errors omit absolute server paths');
     $admin = get_users(['role'=>'administrator','number'=>1])[0]->ID;
     foreach (['agent','other','supervisor'] as $name) {
         $u = wp_insert_user(['user_login'=>'ctai_test_'.$name.'_'.bin2hex(random_bytes(3)), 'user_pass'=>wp_generate_password(32), 'role'=>$name==='supervisor'?'ctai_supervisor':'ctai_agent']);

@@ -6,7 +6,7 @@ This candidate has been exercised locally, not deployed to crystaltapwater.com. 
 
 1. Back up WordPress files, database and encryption configuration. Confirm a tested restore path.
 2. Verify single-site WordPress 6.6+, PHP 8.2+, InnoDB, curl, mbstring, openssl and HTTPS. The local test target is WordPress 7.1.3, PHP 8.3 and MariaDB 10.11; other combinations remain release-matrix work.
-3. Build the ZIP from locked dependencies and verify `dist/SHA256SUMS` after transfer. Do not install GitHub’s Code → Download ZIP source archive: vendor dependencies are intentionally untracked. The packaged ZIP must include vendor/autoload.php and the Web Push library. If replacing an installed source copy, deactivate it before activating the packaged version; different folder names can otherwise leave duplicate plugins.
+3. Build the ZIP from locked dependencies and verify `dist/SHA256SUMS` after transfer. Version 0.1.2 and newer commit the production dependency bundle, so both GitHub source archives and packaged ZIPs contain it. Older GitHub source archives lack dependencies. The packaged ZIP must include vendor/autoload.php and the Web Push library. If replacing an installed source copy, deactivate it before activating the packaged version; different folder names can otherwise leave duplicate plugins.
 4. Install on a staging copy without required companion plugins. Confirm activation/migrations and existing functionality.
 5. Configure actual business information, approval sources, products, water-treatment guidance, delivery/installation policies and support hours. No invented catalog is included.
 6. Confirm the privacy notice and retention policy with the business. Configure approved agent access and a monitored support queue.
@@ -73,3 +73,7 @@ Before upgrading, back up database/files/keys and test the migration on staging.
 ## Incident controls
 
 Disable AI in settings to stop new provider calls; human support stays available. Review provider-side project limits separately. Revoke compromised sessions/devices, rotate affected credentials, and audit access. Never place raw provider error bodies or request credentials in logs or support messages.
+
+## Web Push dependency diagnostics
+
+Version 0.1.2 adds plugin_version, plugin_directory, push_ready, push_vapid_class, push_missing_extensions and push_diagnostic to the administrator-only Environment health view. The active copy must report version 0.1.2 or newer. Missing/unreadable files require restoring the complete dependency bundle or correcting filesystem access. Present files with unavailable classes need investigation of stale active copies/autoload conflicts. Missing PHP extensions or disabled OpenSSL functions require hosting configuration. These checks report no credentials or absolute server paths. They do not prove actual device push delivery.

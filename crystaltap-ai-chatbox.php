@@ -2,7 +2,7 @@
 /**
  * Plugin Name: CrystalTap AI Chatbox
  * Description: Standalone customer chat, approved knowledge, human support and CrystalTap Agent PWA.
- * Version: 0.1.1
+ * Version: 0.1.2
  * Requires at least: 6.6
  * Requires PHP: 8.2
  * Author: CrystalTap
@@ -10,7 +10,7 @@
  * License: GPL-2.0-or-later
  */
 defined('ABSPATH') || exit;
-define('CTAI_VERSION', '0.1.1');
+define('CTAI_VERSION', '0.1.2');
 define('CTAI_FILE', __FILE__);
 define('CTAI_DIR', __DIR__ . '/');
 if (is_file(CTAI_DIR . 'vendor/autoload.php')) {
