@@ -1,0 +1,22 @@
+name: Validate plugin
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  wordpress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: python3 scripts/install.py
+      - run: npx playwright install --with-deps chromium
+      - run: python3 scripts/dev.py
+      - run: npm run check
+      - run: docker compose exec -T wordpress sh -c 'find wp-content/plugins/crystaltap-ai-chatbox/includes -name "*.php" -exec php -l {} \;'
+      - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/integration.php
+      - run: python3 tests/concurrency.py
+      - run: npm test
+      - run: python3 scripts/release.py
+      - run: python3 scripts/package_smoke.py

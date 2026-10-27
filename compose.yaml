@@ -1,0 +1,41 @@
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: local-development-only
+    volumes: ["db:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      retries: 30
+  wordpress:
+    image: wordpress:php8.3-apache
+    ports: ["127.0.0.1:8080:80"]
+    environment: &wordpress-env
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: local-development-only
+      WORDPRESS_DB_NAME: wordpress
+      CTAI_OPENAI_KEY: ${CTAI_OPENAI_KEY:-}
+      CTAI_CA_BUNDLE: /run/ctai-ca.pem
+    depends_on:
+      db: {condition: service_healthy}
+    volumes:
+      - wordpress:/var/www/html
+      - .:/var/www/html/wp-content/plugins/crystaltap-ai-chatbox
+      - /etc/ssl/certs/ca-certificates.crt:/run/ctai-ca.pem:ro
+  cli:
+    image: wordpress:cli-php8.3
+    user: "33:33"
+    environment: *wordpress-env
+    volumes:
+      - wordpress:/var/www/html
+      - .:/var/www/html/wp-content/plugins/crystaltap-ai-chatbox
+      - /etc/ssl/certs/ca-certificates.crt:/run/ctai-ca.pem:ro
+    profiles: ["tools"]
+volumes:
+  db:
+  wordpress:

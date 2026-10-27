@@ -1,0 +1,162 @@
+/* CrystalTap customer widget: no private credentials or conversation storage in localStorage. */
+(() => {
+  'use strict';
+  const boot = window.CTAI_WIDGET;
+  if (!boot || window.ctaiWidgetMounted) return;
+  const roots = [...document.querySelectorAll('[data-ctai-mode]')];
+  const root = roots.find(r => r.dataset.ctaiMode === 'embedded') || roots[0];
+  if (!root) return;
+  window.ctaiWidgetMounted = true;
+  roots.filter(r => r !== root).forEach(r => r.remove());
+  const embedded = root.dataset.ctaiMode === 'embedded';
+  const cfg = boot.config;
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const button = (text, cls, fn) => { const n = el('button', cls, text); n.type = 'button'; n.addEventListener('click', fn); return n; };
+  root.className = `ctai-widget ${embedded ? 'ctai-embedded' : 'ctai-floating'} ctai-${cfg.position}`;
+  root.style.setProperty('--ctai-color', cfg.color);
+  root.style.setProperty('--ctai-offset', `${cfg.offset}px`);
+  root.style.setProperty('--ctai-mobile-offset', `${cfg.mobile_offset}px`);
+  root.style.setProperty('--ctai-width', `${cfg.width}px`);
+  root.style.setProperty('--ctai-height', `${cfg.height}px`);
+  let open = embedded, csrf = '', conversation = null, lastSeq = 0, timer, pending = null, busy = false, initialized = false;
+  const launcher = button('Chat with CrystalTap', 'ctai-launcher', () => toggle(true));
+  launcher.setAttribute('aria-expanded', 'false');
+  launcher.setAttribute('aria-controls', 'ctai-chat-panel');
+  const panel = el('section', 'ctai-panel'); panel.id = 'ctai-chat-panel'; panel.setAttribute('aria-label', 'CrystalTap customer support');
+  const header = el('header', 'ctai-header');
+  if (cfg.logo) { const img = el('img'); img.src = cfg.logo; img.alt = ''; header.append(img); }
+  const heading = el('div'); heading.append(el('strong', '', cfg.bot_name));
+  const status = el('div', 'ctai-status', 'AI and human support'); heading.append(status); header.append(heading);
+  const close = button('−', 'ctai-icon', () => toggle(false)); close.setAttribute('aria-label', 'Minimize chat');
+  if (!embedded) header.append(close);
+  const messages = el('div', 'ctai-messages'); messages.setAttribute('role', 'log'); messages.setAttribute('aria-live', 'polite'); messages.setAttribute('aria-relevant', 'additions');
+  const welcome = el('div', 'ctai-bubble ctai-ai', cfg.welcome); messages.append(welcome);
+  const chips = el('div', 'ctai-chips');
+  cfg.suggestions.forEach(text => chips.append(button(text, 'ctai-chip', () => { input.value = text; input.focus(); })));
+  messages.append(chips);
+  const notice = el('details', 'ctai-privacy'); notice.append(el('summary', '', 'Privacy and your conversation'), el('p', '', cfg.privacy_notice));
+  const error = el('div', 'ctai-error'); error.setAttribute('role', 'status');
+  const tools = el('div', 'ctai-tools');
+  tools.append(button('Talk to a person', '', async () => run(async () => { await ensureConversation(); conversation = await api(`public/conversations/${conversation.id}/handoff`, 'POST', {}); updateStatus(); error.textContent = 'Your request is in the support queue. An agent will respond when available.'; })), button('Leave contact details', '', () => showLead()), button('New chat', '', async () => run(async () => { if (!confirm('Start a new conversation? Your existing history follows the retention policy.')) return; await initialize(); conversation = await api('public/conversations', 'POST', {}); lastSeq = 0; messages.replaceChildren(el('div', 'ctai-bubble ctai-ai', cfg.welcome)); pending = null; input.value = ''; updateStatus(); })));
+  const form = el('form', 'ctai-composer');
+  const input = el('textarea'); input.rows = 1; input.maxLength = 4000; input.placeholder = 'Type your question…'; input.setAttribute('aria-label', 'Message');
+  const send = el('button', 'ctai-send', 'Send'); send.type = 'submit';
+  form.append(input, send);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
+  const thinking = el('div', 'ctai-thinking'); thinking.setAttribute('role', 'status');
+  form.addEventListener('submit', async e => {
+    e.preventDefault(); if (busy || !input.value.trim() || !navigator.onLine) return;
+    await run(async () => {
+      await ensureConversation();
+      if (!pending || pending.content !== input.value.trim()) pending = { key: crypto.randomUUID(), content: input.value.trim() };
+      thinking.textContent = 'Sending your message…';
+      const sent = cfg.streaming_enabled && window.ReadableStream ? await streamMessage(pending) : await api(`public/conversations/${conversation.id}/messages`, 'POST', pending);
+      conversation = sent.conversation; input.value = ''; pending = null;
+      await refresh();
+    });
+    thinking.textContent = '';
+  });
+  panel.append(header, messages, notice, error, tools, thinking, form); root.append(launcher, panel);
+  async function api(path, method = 'GET', data) {
+    const response = await fetch(boot.api + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-CTAI-CSRF': csrf }, body: data === undefined ? undefined : JSON.stringify(data) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Connection failed. Please retry.');
+    return result;
+  }
+  async function streamMessage(payload) {
+    const response = await fetch(boot.api + `public/conversations/${conversation.id}/stream`, { method:'POST', credentials:'same-origin', cache:'no-store', headers:{'Content-Type':'application/json','X-CTAI-CSRF':csrf,'Accept':'text/event-stream'}, body:JSON.stringify(payload) });
+    if (!response.ok) { const error = await response.json(); throw new Error(error.message || 'Unable to send message.'); }
+    if (!response.body) throw new Error('Response interrupted. Retry to check delivery.');
+    const reader=response.body.getReader(), decoder=new TextDecoder(); let buffer='', completed=null, provisional=null, provisionalText=null;
+    try {
+      while(true) {
+        const {value,done}=await reader.read(); buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});
+        let end;
+        while((end=buffer.indexOf('\n\n'))!==-1) {
+          const event=buffer.slice(0,end);buffer=buffer.slice(end+2);
+          const type=event.match(/^event: (.+)$/m)?.[1], raw=event.match(/^data: (.+)$/m)?.[1]; if(!raw)continue;
+          const data=JSON.parse(raw);
+          if(type==='delta') {
+            if(!provisional){provisional=el('article','ctai-bubble ctai-ai');provisional.append(el('small','ctai-sender','AI reply · generating'));provisionalText=el('div');provisional.append(provisionalText);messages.append(provisional);}
+            provisionalText.textContent=data.text; messages.scrollTop=messages.scrollHeight;thinking.textContent='AI is responding…';
+          }
+          if(type==='complete')completed=data;
+          if(type==='error')throw new Error(data.message);
+        }
+        if(done)break;
+      }
+      if(!completed)throw new Error('The response was interrupted. Retry your message to check delivery safely.');
+      provisional?.remove();return completed;
+    } catch(error) {
+      if(provisional)provisional.querySelector('small').textContent='Interrupted reply · not confirmed';
+      throw error;
+    } finally { reader.releaseLock(); }
+  }
+  async function initialize() {
+    if (initialized) return;
+    const data = await api('public/session'); Object.assign(cfg,data.config); csrf = data.csrf; initialized = true;
+    conversation = data.conversations.find(c => !['resolved', 'closed'].includes(c.status)) || data.conversations[0] || null;
+    updateStatus();
+  }
+  async function ensureConversation() { await initialize(); if (!conversation) conversation = await api('public/conversations', 'POST', {}); }
+  function updateStatus() {
+    const labels = { ai_active: 'AI assistance', human_requested: 'Requesting human support', waiting: 'Waiting for an agent', assigned: 'An agent is joining', human_active: 'Human support', resolved: 'Conversation resolved', closed: 'Conversation closed' };
+    status.textContent = conversation ? labels[conversation.status] || 'Support' : 'AI and human support';
+    const ended = conversation && ['resolved','closed'].includes(conversation.status);
+    input.disabled = !!ended || busy || !navigator.onLine; send.disabled = input.disabled;
+    if (ended) input.placeholder = 'Start a new chat to continue';
+  }
+  function appendMessage(m) {
+    const bubble = el('article', `ctai-bubble ctai-${m.sender}`);
+    const label = {customer: 'You', ai: cfg.bot_name, agent: 'CrystalTap support', system: 'Support update'}[m.sender] || 'Support';
+    bubble.append(el('small', 'ctai-sender', label), el('div', '', m.content));
+    for (const p of m.products || []) {
+      const card = el('div', 'ctai-product'); card.append(el('strong', '', p.title));
+      const d = p.details || {};
+      if (d.image) { const image = el('img'); image.src = d.image; image.alt = p.title; image.loading = 'lazy'; card.append(image); }
+      if (d.price !== null && d.price !== undefined) card.append(el('p', '', `${d.currency || ''} ${d.price}`));
+      if (d.availability) card.append(el('p', '', d.availability));
+      if (d.url && /^https:\/\//.test(d.url)) { const a = el('a', '', 'View product'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; card.append(a); }
+      bubble.append(card);
+    }
+    const time = el('time', '', new Date(m.created_at.replace(' ', 'T') + 'Z').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })); bubble.append(time);
+    messages.append(bubble);
+  }
+  async function refresh() {
+    if (!conversation || !navigator.onLine) return;
+    let batch;
+    do {
+      batch = await api(`public/conversations/${conversation.id}/messages?after=${lastSeq}`);
+      conversation = batch.conversation;
+      for (const m of batch.messages) { if (+m.seq > lastSeq) { appendMessage(m); lastSeq = +m.seq; } }
+    } while (batch.messages.length === 100);
+    updateStatus(); messages.scrollTop = messages.scrollHeight;
+  }
+  async function run(fn) { if (busy) return; busy = true; error.textContent = ''; updateStatus(); try { await fn(); } catch (e) { error.textContent = e.message; } finally { busy = false; updateStatus(); } }
+  async function poll() {
+    clearTimeout(timer);
+    if (open && !document.hidden && !busy && navigator.onLine) { try { await refresh(); } catch (e) { error.textContent = e.message; } }
+    timer = setTimeout(poll, Math.max(3, +cfg.poll_seconds) * 1000);
+  }
+  function toggle(value) {
+    open = value; panel.hidden = !value; launcher.hidden = value || embedded; launcher.setAttribute('aria-expanded', String(value));
+    if (value) { run(async () => { await initialize(); await refresh(); }).then(() => { input.focus(); poll(); }); }
+    else { clearTimeout(timer); launcher.focus(); }
+  }
+  function showLead() {
+    if (panel.querySelector('.ctai-lead')) return;
+    const f = el('form', 'ctai-lead'); f.append(el('strong', '', 'How can our team reach you?'));
+    for (const [name, label, type] of [['name','Your name','text'],['email','Email (or provide phone)','email'],['phone','Phone (or provide email)','tel'],['location','City / delivery location','text'],['interest','Product interest','text'],['water_source','Water source','text']]) { const l = el('label', '', label); const i = el('input'); i.name = name; i.type = type; i.maxLength = 190; i.required = name === 'name'; l.append(i); f.append(l); }
+    const consent = el('label', 'ctai-consent'); const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.required = true; checkbox.name = 'consent'; consent.append(checkbox, document.createTextNode('I agree to use these details to respond to this inquiry.')); f.append(consent);
+    const submit = el('button', 'ctai-send', 'Send details'); submit.type = 'submit'; f.append(submit, button('Cancel', '', () => f.remove()));
+    f.addEventListener('submit', e => { e.preventDefault(); run(async () => { await ensureConversation(); await api(`public/conversations/${conversation.id}/lead`, 'POST', { ...Object.fromEntries(new FormData(f)), consent: checkbox.checked }); f.remove(); error.textContent = 'Thank you. Your contact details have been saved for this inquiry.'; }); });
+    panel.insertBefore(f, tools);
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !embedded && open) toggle(false); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && open) poll(); });
+  window.addEventListener('online', () => { error.textContent = ''; updateStatus(); if (open) poll(); });
+  window.addEventListener('offline', () => { error.textContent = 'You are offline. Your message has not been sent.'; updateStatus(); });
+  panel.hidden = !open; launcher.hidden = open;
+  if (embedded) toggle(true);
+  else if (boot.autoGreeting) { launcher.textContent = cfg.welcome; }
+})();

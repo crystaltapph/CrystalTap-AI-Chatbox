@@ -1,0 +1,8 @@
+/vendor/
+/.env
+/dist/
+/test-results/
+/node_modules/
+/.runtime/
+__pycache__/
+*.py[cod]

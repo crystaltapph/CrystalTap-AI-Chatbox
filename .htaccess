@@ -1,0 +1,8 @@
+# Prevent direct HTTP access to development state, dependency internals and repository metadata.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule ^(?:\.runtime|\.git|\.github|node_modules|tests|scripts|docs|dist|vendor)(?:/|$) - [F,L]
+</IfModule>
+<FilesMatch "^(\.|composer\.(json|lock)$|package(-lock)?\.json$|compose\.yaml$|playwright\.config\.js$)">
+Require all denied
+</FilesMatch>

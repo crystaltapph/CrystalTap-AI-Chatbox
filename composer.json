@@ -1,0 +1,8 @@
+{
+  "name": "crystaltap/ai-chatbox",
+  "description": "Standalone WordPress customer support platform",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require": {"php": ">=8.2", "minishlink/web-push": "^9.0"},
+  "config": {"sort-packages": true, "allow-plugins": false}
+}
