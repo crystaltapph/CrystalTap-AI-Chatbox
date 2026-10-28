@@ -1,1 +1,4 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48"><path android:fillColor="#087F83" android:pathData="M0,0h48v48h-48z"/><path android:fillColor="#FFFFFF" android:pathData="M10,11h28v21h-17l-8,7v-7h-3z"/><path android:fillColor="#087F83" android:pathData="M17,19h14v3h-14zM17,25h10v3h-10z"/></vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape><solid android:color="#FFFFFF"/><corners android:radius="16dp"/><size android:width="108dp" android:height="108dp"/></shape></item>
+    <item android:left="16dp" android:top="16dp" android:right="16dp" android:bottom="16dp"><bitmap android:src="@drawable/crystaltap_brand" android:gravity="fill"/></item>
+</layer-list>

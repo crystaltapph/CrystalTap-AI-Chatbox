@@ -80,7 +80,7 @@
   }
   function conversationList(items) {
     if (!items.length) return empty('Your inbox is clear');
-    return `<div class="ctai-conversation-list">${items.map(c => `<button class="ctai-conversation-row" data-conversation="${c.id}" data-version="${c.version}" data-claimed="${c.assigned_agent ? 'yes' : 'no'}"><span class="ctai-contact-icon">G</span><span class="ctai-conversation-info"><strong>Guest · #${c.id}</strong><span>${esc(c.preview || 'No messages yet')}</span><small><span class="ctai-state ctai-state-${esc(c.status)}">${esc(label(c.status))}</span>${c.assigned_agent ? ` · Agent #${esc(c.assigned_agent)}` : ''}</small></span><span class="ctai-conversation-meta">${esc(time(c.updated_at))}${+c.unread ? `<b>${c.unread}</b>` : ''}</span></button>`).join('')}</div>`;
+    return `<div class="ctai-conversation-list">${items.map(c => `<button class="ctai-conversation-row" data-conversation="${c.id}" data-version="${c.version}" data-claimed="${c.assigned_agent ? 'yes' : 'no'}"><span class="ctai-contact-icon">G</span><span class="ctai-conversation-info"><strong>${esc(c.customer?.name||'Guest')} · #${c.id}</strong><span>${esc(c.preview || 'No messages yet')}</span><small><span class="ctai-state ctai-state-${esc(c.status)}">${esc(label(c.status))}</span>${c.assigned_agent ? ` · Agent #${esc(c.assigned_agent)}` : ''}</small></span><span class="ctai-conversation-meta">${esc(time(c.updated_at))}${+c.unread ? `<b>${c.unread}</b>` : ''}</span></button>`).join('')}</div>`;
   }
   function bindConversationLinks() {
     view.querySelectorAll('[data-conversation]').forEach(b => b.onclick = () => run(async () => {

@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.2.1
+Stable tag: 0.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -39,7 +39,7 @@ Embedded mode takes precedence if multiple launch points exist on the same page.
 
 Conversation content is stored in dedicated tables in your WordPress database.
 When AI is enabled, relevant recent messages and approved business sources are sent to OpenAI.
-Push uses the browser vendor's push service; alerts omit customer message contents on lock screens.
+Android alerts use Firebase Cloud Messaging and include bounded public customer message previews. Private team notes are excluded. Android lock-screen settings control preview visibility. New chats collect a required name and optional email/phone for support; these details follow conversation retention and privacy export/erasure.
 Use privacy tools and an approved retention policy. Deactivation/uninstall preserve data.
 
 == Known limitations ==
@@ -50,6 +50,9 @@ Native Android push needs Firebase configuration and Google Play services. Physi
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.2.2 =
+Require a customer name before starting a new chat; offer optional email and phone. Display saved details to authorized agents and include public customer message previews in Android alerts. Support the new branded Android 0.1.3 app.
 
 = 0.2.1 =
 Alert online agents when customers send more messages in an unclaimed support conversation. Avoid throttling unchanged device-registration refreshes. Add scheduler/queue-delay diagnostics and opt-in Firebase system notifications for Android app 0.1.1, preserving compatibility with the original APK.

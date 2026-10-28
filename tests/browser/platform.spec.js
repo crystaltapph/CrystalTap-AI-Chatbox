@@ -10,9 +10,30 @@ async function signIn(page){
   await page.locator('#wp-submit').click();
   await page.waitForURL(/wp-admin/);
 }
+async function startChat(page,name='Browser fixture visitor'){
+  const form=page.getByRole('form',{name:'Customer details'});await expect(form).toBeVisible();
+  await form.getByLabel('Name (required)',{exact:true}).fill(name);await form.getByRole('button',{name:'Start chat',exact:true}).click();
+  await expect(page.getByRole('textbox',{name:'Message',exact:true})).toBeVisible();
+}
+test('customer form requires only name and shows saved optional contacts to agents',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await page.goto('/chat-demo/');
+  const form=page.getByRole('form',{name:'Customer details'});await expect(form).toBeVisible();
+  await expect(form.getByLabel('Name (required)',{exact:true})).toHaveAttribute('required','');
+  expect(await form.getByLabel('Email (optional)',{exact:true}).evaluate(e=>e.required)).toBe(false);
+  expect(await form.getByLabel('Phone (optional)',{exact:true}).evaluate(e=>e.required)).toBe(false);
+  await form.getByRole('button',{name:'Start chat',exact:true}).click();await expect(form).toBeVisible();
+  const session=await page.evaluate(async()=>await(await fetch('/wp-json/crystaltap-ai/v1/public/session')).json());expect(session.conversations).toHaveLength(0);
+  const rejected=await page.request.post('/wp-json/crystaltap-ai/v1/public/conversations',{headers:{'X-CTAI-CSRF':session.csrf},data:{}});expect(rejected.status()).toBe(400);
+  await form.getByLabel('Name (required)',{exact:true}).fill('Alex Santos');await form.getByLabel('Email (optional)',{exact:true}).fill('alex@example.invalid');await form.getByLabel('Phone (optional)',{exact:true}).fill('+63 900 000 0000');
+  await page.screenshot({path:'.runtime/customer-prechat.png'});
+  await page.setViewportSize({width:320,height:500});await form.getByRole('button',{name:'Start chat',exact:true}).scrollIntoViewIfNeeded();await expect(form.getByRole('button',{name:'Start chat',exact:true})).toBeInViewport();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.setViewportSize({width:390,height:844});
+  await form.getByRole('button',{name:'Start chat',exact:true}).click();await expect(page.getByRole('textbox',{name:'Message',exact:true})).toBeVisible();
+  const saved=await page.evaluate(async()=>await(await fetch('/wp-json/crystaltap-ai/v1/public/session')).json());expect(saved.customer.name).toBe('Alex Santos');expect(saved.customer.email).toBe('alex@example.invalid');expect(saved.customer.phone).toBe('+63 900 000 0000');
+  await signIn(page);await page.goto('/crystaltap-agent/#conversation/'+saved.conversations[0].id);const card=page.locator('.ctai-card').filter({has:page.getByRole('heading',{name:'Customer information',exact:true})});await expect(card).toContainText('Alex Santos');await expect(card).toContainText('alex@example.invalid');await expect(card).toContainText('+63 900 000 0000');
+});
 test('customer widget resumes, sends, hands off and rejects a different visitor',async({page,browser})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('/chat-demo/');
+  await page.goto('/chat-demo/');await startChat(page);
   await expect(page.locator('.ctai-widget')).toHaveCount(1);
   await expect(page.getByRole('region',{name:'CrystalTap customer support'})).toBeVisible();
   await page.getByRole('textbox',{name:'Message',exact:true}).fill('Browser test: need a purifier');
@@ -33,7 +54,7 @@ test('customer widget resumes, sends, hands off and rejects a different visitor'
 });
 test('WordPress agent takes over and replies to a visitor; notes stay private',async({page,browser})=>{
   const visitor=await browser.newContext();const customer=await visitor.newPage();
-  await customer.goto('http://localhost:8080/chat-demo/');
+  await customer.goto('http://localhost:8080/chat-demo/');await startChat(customer);
   await customer.getByRole('textbox',{name:'Message',exact:true}).fill('Browser conversation requiring support');
   await customer.getByRole('button',{name:'Send',exact:true}).click();
   await expect(customer.locator('.ctai-customer')).toBeVisible();
@@ -78,7 +99,7 @@ test('public SSE fallback completes cleanly and mutation CSRF is enforced',async
   const session=await(await request.get('/wp-json/crystaltap-ai/v1/public/session')).json();
   const noCsrf=await request.post('/wp-json/crystaltap-ai/v1/public/conversations');expect(noCsrf.status()).toBe(403);
   const headers={'X-CTAI-CSRF':session.csrf};
-  const c=await(await request.post('/wp-json/crystaltap-ai/v1/public/conversations',{headers})).json();
+  const c=await(await request.post('/wp-json/crystaltap-ai/v1/public/conversations',{headers,data:{name:'SSE fixture visitor'}})).json();
   const stream=await request.post(`/wp-json/crystaltap-ai/v1/public/conversations/${c.id}/stream`,{headers,data:{content:'SSE fallback fixture',key:'streamfallback123456'}});
   expect(stream.headers()['content-type']).toContain('text/event-stream');
   const events=(await stream.text()).trim().split('\n\n');
@@ -133,7 +154,7 @@ test('business contact settings publish safe app links in a phone-sized widget',
     await page.locator('[name=viber_number]').fill('+63 912 345 6789');await page.locator('[name=viber_url]').fill('');
     await page.getByRole('button',{name:'Save settings',exact:true}).click();
     await expect(page.locator('#ctai-alert')).toHaveText('Settings saved.');
-    const customer=await visitor.newPage();await customer.goto('http://localhost:8080/chat-demo/');
+    const customer=await visitor.newPage();await customer.goto('http://localhost:8080/chat-demo/');await startChat(customer);
     const channels=customer.getByRole('navigation',{name:'Other ways to contact us'});
     await expect(channels).toBeVisible();
     await expect(channels.getByRole('link',{name:'Contact us on WhatsApp',exact:true})).toHaveAttribute('href','https://wa.me/639123456789');
@@ -194,14 +215,14 @@ test('typing a new draft during a slow agent send preserves the draft',async({pa
 });
 
 test('expired visitor session can start a new chat without reloading the page',async({page})=>{
-  await page.goto('/chat-demo/');
+  await page.goto('/chat-demo/');await startChat(page);
   const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Session recovery fixture');
   await page.getByRole('button',{name:'Send',exact:true}).click();await expect(page.locator('.ctai-customer')).toBeVisible();
   await page.context().clearCookies();
   await input.fill('Retain my unsent draft');await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page.locator('.ctai-error')).toContainText('Select New chat to continue');
   await expect(input).toHaveValue('Retain my unsent draft');
-  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'New chat',exact:true}).click();
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'New chat',exact:true}).click();await startChat(page);
   await expect(input).toBeEnabled();await expect(input).toHaveValue('');
   await expect(page.locator('.ctai-customer')).toHaveCount(0);
   await input.fill('Fresh session works');await page.getByRole('button',{name:'Send',exact:true}).click();
@@ -209,7 +230,7 @@ test('expired visitor session can start a new chat without reloading the page',a
 });
 
 test('a delayed visitor history response cannot replace a new chat',async({page})=>{
-  await page.goto('/chat-demo/');
+  await page.goto('/chat-demo/');await startChat(page);
   const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Old conversation marker');
   await page.getByRole('button',{name:'Send',exact:true}).click();await expect(page.locator('.ctai-customer')).toContainText('Old conversation marker');
   let release,started;const pending=new Promise(resolve=>{started=resolve;});
@@ -218,7 +239,7 @@ test('a delayed visitor history response cannot replace a new chat',async({page}
   },{times:1});
   // Visibility restoration triggers the same history refresh used by the polling timer.
   await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await pending;
-  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'New chat',exact:true}).click();
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'New chat',exact:true}).click();await startChat(page);
   await expect(page.locator('.ctai-customer')).toHaveCount(0);
   const complete=page.waitForResponse(r=>r.url().includes('/messages?after='));release();await complete;
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
@@ -232,7 +253,7 @@ test('visitor and agent exchange private images, emoji, links and real typing in
   const visitor=await browser.newContext({viewport:{width:390,height:844}}),customer=await visitor.newPage();
   const errors=[];customer.on('pageerror',e=>errors.push(e.message));page.on('pageerror',e=>errors.push(e.message));
   try {
-    await customer.goto('http://localhost:8080/chat-demo/');
+    await customer.goto('http://localhost:8080/chat-demo/');await startChat(customer);
     await customer.getByRole('button',{name:'Add emoji',exact:true}).click();
     await customer.getByRole('button',{name:'Insert 😊',exact:true}).click();
     const input=customer.getByRole('textbox',{name:'Message',exact:true});await expect(input).toHaveValue('😊');
@@ -288,7 +309,7 @@ test('uploaded launcher icon is saved and shown in the floating widget',async({p
     const customer=await visitor.newPage();await customer.goto('http://localhost:8080/');
     const launcher=customer.getByRole('button',{name:'Chat with CrystalTap',exact:true});await expect(launcher).toBeVisible();
     await expect.poll(()=>launcher.locator('img').evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);
-    await launcher.click();await expect(customer.getByRole('textbox',{name:'Message',exact:true})).toBeVisible();
+    await launcher.click();await startChat(customer);await expect(customer.getByRole('textbox',{name:'Message',exact:true})).toBeVisible();
     const bounds=await customer.evaluate(()=>{const p=document.querySelector('.ctai-panel').getBoundingClientRect(),f=document.querySelector('.ctai-composer').getBoundingClientRect();return {panel:p.bottom,composer:f.bottom,width:document.documentElement.scrollWidth,viewport:innerWidth};});
     expect(bounds.composer).toBeLessThanOrEqual(bounds.panel+1);expect(bounds.width).toBeLessThanOrEqual(bounds.viewport);
     await customer.setViewportSize({width:320,height:500});await customer.getByRole('textbox',{name:'Message',exact:true}).scrollIntoViewIfNeeded();await expect(customer.getByRole('textbox',{name:'Message',exact:true})).toBeInViewport();

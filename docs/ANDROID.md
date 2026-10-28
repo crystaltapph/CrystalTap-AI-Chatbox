@@ -2,7 +2,7 @@
 
 ## What is delivered
 
-Plugin 0.2.1 supplies native device approval, opaque access tokens, encrypted device registrations and FCM HTTP-v1 delivery. Android app 0.1.2 provides native sign-in, inbox/claim/reply, internal notes, images, emoji, links, notifications, lead status updates, preferences and a dedicated alert channel. Product/AI/business administration stays in the browser workspace. There is no WebView wrapper.
+Plugin 0.2.2 supplies native device approval, opaque access tokens, encrypted device registrations and FCM HTTP-v1 delivery. Android app 0.1.3 provides native sign-in, inbox/claim/reply, internal notes, images, emoji, links, notifications, lead status updates, preferences and a dedicated alert channel. Product/AI/business administration stays in the browser workspace. There is no WebView wrapper.
 
 The user's website is `https://crystaltapwater.com/`. The user has since configured Firebase and reported successful but intermittent alerts. This workspace has no access to the live Google or WordPress administrator account, so it cannot independently certify delivery or POCO sound. The live site was not deployed from this workspace; its network access was initially blocked by the cloud egress policy.
 
@@ -17,6 +17,14 @@ The app does not collect the WordPress password. The website issues a random dev
 ## App 0.1.2 interface update
 
 Install app 0.1.2 over 0.1.0 or 0.1.1 without uninstalling. It retains the same signing identity and works with plugin 0.2.1. The inbox, chat composer, alerts, leads and profile now share native card layouts and bottom navigation. Existing browser approval, private notes, images, notification settings and background delivery remain supported. See [the UI preview and validation notes](ANDROID-UI.md).
+
+## Customer details and message previews (0.2.2 / 0.1.3)
+
+Install plugin 0.2.2 before APK 0.1.3. Clear your website/page cache after the plugin update so visitors receive the new required-name form. New chats require a name; email and phone are optional. Details are stored with the conversation, shown to assigned agents/supervisors, and included in privacy export/erasure. Existing chats remain usable without retroactive identity prompts. The app launcher and in-app mark use the supplied CrystalTap artwork on a white adaptive-icon background.
+
+Automatic alerts include up to 240 characters from a public customer message. A message event uses the original message; handoff/assignment/follow-up alerts use the latest public customer message. Private team notes and agent replies are excluded. Eligible waiting-queue agents can see the short message preview in the alert; contact information and full conversation access still follow assignment/supervisor rules. A photo-only message has a photo notice; a conversation without a message has a support-request fallback. Test alerts keep their test text.
+
+FCM receives the bounded preview to display background notifications. No message preview is written to diagnostic logs. Android notification visibility stays PRIVATE, with actual lock-screen behavior controlled by the phone’s settings.
 
 ## Create Firebase (Google account action required)
 
@@ -43,7 +51,7 @@ Native push still uses the plugin's background job worker. Set a real one-minute
 
 ## Intermittent or delayed alerts (plugin 0.2.1 / app 0.1.1)
 
-Update the plugin first, then install the new APK over the old app without uninstalling. The same signing identity is retained. The server keeps the original data-only payload for app 0.1.0; app 0.1.1 explicitly opts in to generic Firebase notification-plus-data payloads. Firebase displays background alerts on the existing CrystalTap channel; foreground alerts use the native service. Notification taps handle both Firebase string IDs and local integer IDs, and access is still checked by the server. No customer message text is sent in notification payloads.
+Update the plugin first, then install the new APK over the old app without uninstalling. The same signing identity is retained. The server keeps the original data-only payload for app 0.1.0; app 0.1.1 explicitly opts in to generic Firebase notification-plus-data payloads. Firebase displays background alerts on the existing CrystalTap channel; foreground alerts use the native service. Notification taps handle both Firebase string IDs and local integer IDs, and access is still checked by the server. In 0.2.2, notification payloads include bounded public customer message previews as requested; private notes stay excluded.
 
 New customer messages in an unclaimed human-support conversation now create alerts for online agents and supervisors. AI-only chats remain silent. Duplicate message retries do not create extra notification records. Every automatic alert retains its event/tag across delivery retries. Unchanged token refreshes are idempotent and do not exhaust the registration-change limit when the app resumes repeatedly.
 
@@ -65,7 +73,7 @@ No new manifest/install/offline/push feature is served. The old manifest returns
 
 ## Signing and reproducible builds
 
-Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.2.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
+Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.3.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
 
 The build creates a local candidate signing identity in `.runtime/android-signing.jks` with its private password in `.runtime/android-signing.json`. Both are mode 0600 and ignored by Git. Back them up securely outside the checkout before replacing the environment. **Future APK updates must use the same signing key.** Do not publish those files or cache them in public CI artifacts. A fresh CI build creates a different candidate identity; its APK is a test artifact, not an update for an already distributed build. Google Play distribution needs its own account, policy review and release-signing plan.
 

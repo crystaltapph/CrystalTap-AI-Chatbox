@@ -16,6 +16,7 @@ jobs:
       - run: npm run check
       - run: docker compose exec -T wordpress sh -c 'find wp-content/plugins/crystaltap-ai-chatbox/includes -name "*.php" -exec php -l {} \;'
       - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/integration.php
+      - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/customer.php
       - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/native.php
       - run: python3 tests/concurrency.py
       - run: npm test

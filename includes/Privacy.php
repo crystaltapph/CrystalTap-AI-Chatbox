@@ -33,21 +33,23 @@ final class Privacy {
     }
     public static function exportEmail(string $email, int $page = 1): array {
         global $wpdb;
-        $leads = $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . DB::table('leads') . ' WHERE email=%s ORDER BY id LIMIT 20 OFFSET %d', $email, max(0, $page - 1) * 20), ARRAY_A);
-        $data = [];
-        foreach ($leads as $lead) {
-            $public = array_intersect_key($lead, array_flip(['name','email','phone','location','interest','water_source','inquiry','consent','created_at']));
-            $messages = $wpdb->get_results($wpdb->prepare('SELECT sender,content,created_at FROM ' . DB::table('messages') . " WHERE conversation_id=%d AND visibility='public' ORDER BY seq", $lead['conversation_id']), ARRAY_A);
-            $public['conversation'] = wp_json_encode($messages);
-            $public['images'] = wp_json_encode(Images::export((int)$lead['conversation_id']));
-            $data[] = ['group_id' => 'crystaltap-ai', 'group_label' => 'CrystalTap AI support', 'item_id' => 'ctai-lead-' . $lead['id'], 'data' => array_map(fn($k, $v) => ['name' => $k, 'value' => (string) $v], array_keys($public), array_values($public))];
+        $conversations=DB::table('conversations');$leads=DB::table('leads');
+        $rows=$wpdb->get_results($wpdb->prepare("SELECT c.* FROM $conversations c LEFT JOIN $leads l ON l.conversation_id=c.id WHERE c.customer_email=%s OR l.email=%s ORDER BY c.id LIMIT 20 OFFSET %d",$email,$email,max(0,$page-1)*20),ARRAY_A);
+        $data=[];
+        foreach($rows as$c){
+            $lead=$wpdb->get_row($wpdb->prepare("SELECT * FROM $leads WHERE conversation_id=%d",$c['id']),ARRAY_A);
+            $public=$lead?array_intersect_key($lead,array_flip(['name','email','phone','location','interest','water_source','inquiry','consent','created_at'])):[];
+            $public['chat_profile']=wp_json_encode(['name'=>$c['customer_name'],'email'=>$c['customer_email'],'phone'=>$c['customer_phone']]);
+            $messages=$wpdb->get_results($wpdb->prepare('SELECT sender,content,created_at FROM '.DB::table('messages')." WHERE conversation_id=%d AND visibility='public' ORDER BY seq",$c['id']),ARRAY_A);
+            $public['conversation']=wp_json_encode($messages);$public['images']=wp_json_encode(Images::export((int)$c['id']));
+            $data[]=['group_id'=>'crystaltap-ai','group_label'=>'CrystalTap AI support','item_id'=>'ctai-conversation-'.$c['id'],'data'=>array_map(fn($k,$v)=>['name'=>$k,'value'=>(string)$v],array_keys($public),array_values($public))];
         }
-        return ['data' => $data, 'done' => count($leads) < 20];
+        return ['data'=>$data,'done'=>count($rows)<20];
     }
     public static function eraseEmail(string $email, int $page = 1): array {
-        global $wpdb;
-        $ids = $wpdb->get_col($wpdb->prepare('SELECT conversation_id FROM ' . DB::table('leads') . ' WHERE email=%s LIMIT 20', $email));
-        foreach ($ids as $id) { self::eraseConversation((int) $id); }
-        return ['items_removed' => (bool) $ids, 'items_retained' => false, 'messages' => [], 'done' => count($ids) < 20];
+        global $wpdb;$c=DB::table('conversations');$l=DB::table('leads');
+        $ids=$wpdb->get_col($wpdb->prepare("SELECT c.id FROM $c c LEFT JOIN $l l ON l.conversation_id=c.id WHERE c.customer_email=%s OR l.email=%s LIMIT 20",$email,$email));
+        foreach($ids as$id)self::eraseConversation((int)$id);
+        return ['items_removed'=>(bool)$ids,'items_retained'=>false,'messages'=>[],'done'=>count($ids)<20];
     }
 }

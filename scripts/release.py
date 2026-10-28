@@ -8,7 +8,7 @@ import zipfile
 root=Path(__file__).resolve().parents[1]
 out=root/'dist'
 out.mkdir(exist_ok=True)
-target=out/'crystaltap-ai-chatbox-0.2.1.zip'
+target=out/'crystaltap-ai-chatbox-0.2.2.zip'
 files=[root/p for p in ['crystaltap-ai-chatbox.php','uninstall.php','readme.txt','LICENSE','.htaccess']]
 for directory in ['includes','assets','mobile']:
     for path in (root/directory).rglob('*'):

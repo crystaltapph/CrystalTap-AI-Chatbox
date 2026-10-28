@@ -60,12 +60,12 @@ final class API {
             global $wpdb;
             $s = Auth::session(true);
             $rows = $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . DB::table('conversations') . " WHERE session_id=%d AND status<>'closed' ORDER BY id DESC LIMIT 5", $s['id']), ARRAY_A);
-            return ['csrf' => $s['csrf'], 'config' => Settings::publicConfig(), 'conversations' => array_map([Conversations::class, 'view'], $rows)];
+            return ['csrf' => $s['csrf'], 'config' => Settings::publicConfig(), 'conversations' => array_map([Conversations::class, 'view'], $rows), 'customer'=>$rows?Customer::details($rows[0]):null];
         }, 'public');
         self::route('/public/session', 'DELETE', static function ($r) {
             global $wpdb; $s = Auth::visitor($r); $wpdb->delete(DB::table('sessions'), ['id' => $s['id']]); unset($_COOKIE[Auth::COOKIE]); return ['revoked' => true];
         }, 'visitor');
-        self::route('/public/conversations', 'POST', static fn($r) => Conversations::start((int) Auth::visitor($r)['id']), 'visitor');
+        self::route('/public/conversations', 'POST', static fn($r) => Conversations::start((int) Auth::visitor($r)['id'],self::input($r)), 'visitor');
         self::route('/public/conversations/(?P<id>\d+)/messages', 'GET', static function ($r) {
             $c = Conversations::owned((int) $r['id'], (int) Auth::visitor($r)['id']);
             return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after'])), 'typing'=>Typing::state($c)];
@@ -114,7 +114,7 @@ final class API {
         self::route('/agent/conversations/(?P<id>\d+)', 'GET', static function ($r) {
             global $wpdb;
             $c = Conversations::get((int) $r['id']); Auth::scope($c);
-            $customer = $wpdb->get_row($wpdb->prepare('SELECT name,email,phone,location,interest,water_source FROM ' . DB::table('leads') . ' WHERE conversation_id=%d', $r['id']), ARRAY_A);
+            $customer = Customer::details($c);
             return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after']), true), 'customer' => $customer, 'typing'=>Typing::state($c)];
         });
         self::route('/agent/conversations/(?P<id>\d+)/messages', 'POST', static function ($r) { $b = self::input($r); Auth::rate('agent_send', 60, 60, (string) get_current_user_id()); return Conversations::agentMessage((int) $r['id'], Images::text($b), Auth::key($b['key'] ?? ''), !empty($b['internal']), Images::ids($b['attachments'] ?? [])); });

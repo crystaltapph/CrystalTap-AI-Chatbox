@@ -18,7 +18,7 @@
   root.style.setProperty('--ctai-mobile-offset', `${cfg.mobile_offset}px`);
   root.style.setProperty('--ctai-width', `${cfg.width}px`);
   root.style.setProperty('--ctai-height', `${cfg.height}px`);
-  let open = embedded, csrf = '', conversation = null, lastSeq = 0, timer, pending = null, busy = false, initialized = false, conversationEpoch = 0, sessionExpired = false;
+  let open = embedded, csrf = '', conversation = null, lastSeq = 0, timer, pending = null, busy = false, initialized = false, conversationEpoch = 0, sessionExpired = false, customer = null;
   const launcher = button('Chat with CrystalTap', 'ctai-launcher', () => toggle(true));
   const launcherText=el('span','ctai-launcher-text','Chat with CrystalTap');launcher.replaceChildren();
   const launcherIcon=cfg.launcher_icon?el('img','ctai-launcher-image'):el('span','ctai-launcher-symbol','💬');
@@ -57,8 +57,21 @@
     channels.hidden = !channels.children.length;
   }
   renderChannels();
+  const prechat=el('form','ctai-prechat');prechat.setAttribute('aria-label','Customer details');prechat.hidden=true;
+  prechat.append(el('h3','','Before we begin'),el('p','','Tell us your name so our team knows who we’re helping.'));
+  for(const [name,label,type,limit] of [['name','Name (required)','text',190],['email','Email (optional)','email',190],['phone','Phone (optional)','tel',60]]){
+    const field=el('label','',label),entry=el('input');entry.name=name;entry.type=type;entry.maxLength=limit;entry.autocomplete=name==='phone'?'tel':name;entry.required=name==='name';entry.placeholder={name:'Your name',email:'you@example.com',phone:'+63…'}[name];field.append(entry);prechat.append(field);
+  }
+  prechat.append(el('small','','These details are used to help with this conversation.'));
+  const startChat=el('button','ctai-send','Start chat');startChat.type='submit';prechat.append(startChat);
+  prechat.addEventListener('submit',event=>{event.preventDefault();run(async()=>{
+    const profile=Object.fromEntries(new FormData(prechat));profile.name=profile.name.trim();
+    if(!profile.name){prechat.elements.name.focus();throw new Error('Please enter your name.');}
+    await initialize();for(const name of ['name','email','phone'])prechat.elements[name].value=profile[name];conversation=await api('public/conversations','POST',profile);customer=profile;sessionExpired=false;lastSeq=0;conversationEpoch++;updateStatus();await refresh();input.focus();
+  });});
+  function fillCustomer(){for(const name of ['name','email','phone'])prechat.elements[name].value=customer?.[name]||'';}
   const tools = el('div', 'ctai-tools');
-  tools.append(button('Talk to a person', '', async () => run(async () => { await ensureConversation(); conversation = await api(`public/conversations/${conversation.id}/handoff`, 'POST', {}); updateStatus(); error.textContent = 'Your request is in the support queue. An agent will respond when available.'; })), button('Leave contact details', '', () => showLead()), button('New chat', '', async () => run(async () => { if (!confirm('Start a new conversation? Your existing history follows the retention policy.')) return; await initialize(); conversationEpoch++; conversation = await api('public/conversations', 'POST', {}); sessionExpired = false; lastSeq = 0; messages.replaceChildren(el('div', 'ctai-bubble ctai-ai', cfg.welcome)); pending = null; input.value = ''; attachments.clear();attachments.stop();updateStatus(); })));
+  tools.append(button('Talk to a person', '', async () => run(async () => { await ensureConversation(); conversation = await api(`public/conversations/${conversation.id}/handoff`, 'POST', {}); updateStatus(); error.textContent = 'Your request is in the support queue. An agent will respond when available.'; })), button('Leave contact details', '', () => showLead()), button('New chat', '', async () => run(async () => { if (!confirm('Start a new conversation? Your existing history follows the retention policy.')) return; await initialize(); conversationEpoch++; conversation = null; fillCustomer(); sessionExpired = false; lastSeq = 0; messages.replaceChildren(el('div', 'ctai-bubble ctai-ai', cfg.welcome)); pending = null; input.value = ''; attachments.clear();attachments.stop();updateStatus(); })));
   const form = el('form', 'ctai-composer');
   const input = el('textarea'); input.rows = 1; input.maxLength = 4000; input.placeholder = 'Type your question…'; input.setAttribute('aria-label', 'Message');
   const send = el('button', 'ctai-send', 'Send'); send.type = 'submit';
@@ -82,7 +95,7 @@
     });
     thinking.textContent = '';thinking.classList.remove('is-typing');
   });
-  panel.append(header, messages, notice, channels, error, tools, peerTyping, thinking, composerTools, form); root.append(launcher, panel);
+  panel.append(header, prechat, messages, notice, channels, error, tools, peerTyping, thinking, composerTools, form); root.append(launcher, panel);
   ui.watchTyping(peerTyping,async()=>conversation&&!busy?(await api(`public/conversations/${conversation.id}/typing`)).agent:false,'Support agent');
   async function api(path, method = 'GET', data) {
     const response = await fetch(boot.api + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-CTAI-CSRF': csrf }, body: data === undefined ? undefined : JSON.stringify(data) });
@@ -127,15 +140,16 @@
   }
   async function initialize() {
     if (initialized) return;
-    const data = await api('public/session'); Object.assign(cfg,data.config); renderChannels(); csrf = data.csrf; initialized = true;
+    const data = await api('public/session'); Object.assign(cfg,data.config); renderChannels(); csrf = data.csrf; initialized = true; sessionExpired=false; customer=data.customer||null; fillCustomer();
     conversation = data.conversations.find(c => !['resolved', 'closed'].includes(c.status)) || data.conversations[0] || null;
     updateStatus();
   }
-  async function ensureConversation() { if(sessionExpired)throw new Error('Your chat session expired. Select New chat to continue.'); await initialize(); if (!conversation) conversation = await api('public/conversations', 'POST', {}); }
+  async function ensureConversation() { if(sessionExpired)throw new Error('Your chat session expired. Select New chat to continue.'); await initialize(); if (!conversation) { updateStatus(); prechat.elements.name.focus(); throw new Error('Enter your name and select Start chat.'); } }
   function updateStatus() {
     const labels = { ai_active: 'AI assistance', human_requested: 'Requesting human support', waiting: 'Waiting for an agent', assigned: 'An agent is joining', human_active: 'Human support', resolved: 'Conversation resolved', closed: 'Conversation closed' };
     status.textContent = conversation ? labels[conversation.status] || 'Support' : 'AI and human support';
     const ended = conversation && ['resolved','closed'].includes(conversation.status);
+    const identifying=!conversation;prechat.hidden=!identifying;messages.hidden=identifying;tools.hidden=identifying;form.hidden=identifying;composerTools.hidden=identifying;startChat.disabled=busy||!navigator.onLine;
     attachments.lock(busy||sessionExpired||!!ended||!navigator.onLine);
     input.disabled = sessionExpired || !!ended || busy || !navigator.onLine; send.disabled = input.disabled;
     input.placeholder = ended ? 'Start a new chat to continue' : 'Type your question…';
@@ -176,7 +190,7 @@
   }
   function toggle(value) {
     open = value; panel.hidden = !value; launcher.hidden = value || embedded; launcher.setAttribute('aria-expanded', String(value));
-    if (value) { run(async () => { await initialize(); await refresh(); }).then(() => { input.focus(); poll(); }); }
+    if (value) { run(async () => { await initialize(); await refresh(); }).then(() => { if(conversation)input.focus();else prechat.elements.name.focus();poll(); }); }
     else { clearTimeout(timer); launcher.focus(); }
   }
   function showLead() {

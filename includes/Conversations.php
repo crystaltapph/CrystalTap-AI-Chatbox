@@ -14,10 +14,12 @@ final class Conversations {
         if ((int) $row['session_id'] !== $session) { throw new Fault('Conversation not found', 404); }
         return $row;
     }
-    public static function start(int $session): array {
+    public static function start(int $session, ?array $customer = null): array {
         Auth::rate('conversations', 10, 3600, (string) $session);
+        $customer=$customer===null?null:Customer::validate($customer);
         $now = DB::now();
-        $id = DB::insert('conversations', ['session_id' => $session, 'created_at' => $now, 'updated_at' => $now]);
+        $profile=$customer===null?[]:['customer_name'=>$customer['name'],'customer_email'=>$customer['email'],'customer_phone'=>$customer['phone']];
+        $id = DB::insert('conversations', ['session_id' => $session, 'created_at' => $now, 'updated_at' => $now]+$profile);
         return self::view(self::get($id));
     }
     public static function view(array $row): array {
@@ -162,12 +164,13 @@ final class Conversations {
         if ($search !== '') {
             $like = '%' . $wpdb->esc_like(substr($search, 0, 80)) . '%';
             $canSearch = current_user_can('ctai_supervise') ? '1=1' : $wpdb->prepare('c.assigned_agent=%d', $uid);
-            $where .= $wpdb->prepare(' AND (CAST(c.id AS CHAR) LIKE %s OR ((' . $canSearch . ') AND (EXISTS(SELECT 1 FROM ' . DB::table('leads') . ' l WHERE l.conversation_id=c.id AND l.name LIKE %s) OR EXISTS(SELECT 1 FROM ' . DB::table('messages') . " m WHERE m.conversation_id=c.id AND m.visibility='public' AND m.content LIKE %s))))", $like, $like, $like);
+            $where .= $wpdb->prepare(' AND (CAST(c.id AS CHAR) LIKE %s OR ((' . $canSearch . ') AND (c.customer_name LIKE %s OR EXISTS(SELECT 1 FROM ' . DB::table('leads') . ' l WHERE l.conversation_id=c.id AND l.name LIKE %s) OR EXISTS(SELECT 1 FROM ' . DB::table('messages') . " m WHERE m.conversation_id=c.id AND m.visibility='public' AND m.content LIKE %s))))", $like, $like, $like, $like);
         }
         $rows = $wpdb->get_results('SELECT c.* FROM ' . DB::table('conversations') . " c WHERE $where ORDER BY updated_at DESC,id DESC LIMIT 40 OFFSET " . ((max(1, min(1000, $page)) - 1) * 40), ARRAY_A);
         return array_map(function ($c) use ($wpdb, $uid) {
             $view = self::view($c);
             if (current_user_can('ctai_supervise') || (int) $c['assigned_agent'] === $uid) {
+                $view['customer'] = Customer::details($c);
                 $view['preview'] = $wpdb->get_var($wpdb->prepare('SELECT content FROM ' . DB::table('messages') . " WHERE conversation_id=%d AND visibility='public' ORDER BY seq DESC LIMIT 1", $c['id']));
                 $view['unread'] = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . DB::table('messages') . " WHERE conversation_id=%d AND sender='customer' AND seq>COALESCE((SELECT last_seq FROM " . DB::table('conversation_reads') . ' WHERE conversation_id=%d AND user_id=%d),0)', $c['id'], $c['id'], $uid));
             } else { $view['preview'] = 'Claim to view customer details'; $view['unread'] = 0; }

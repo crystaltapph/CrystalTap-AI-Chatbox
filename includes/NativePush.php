@@ -41,16 +41,28 @@ final class NativePush {
         if(is_wp_error($r)||wp_remote_retrieve_response_code($r)!==200||!is_string($j['access_token']??null)){throw new Fault('Firebase authentication failed. Check the service account, API permissions and server clock.',502,'firebase_auth');}
         set_transient('ctai_fcm_oauth',Push::encrypt($j['access_token']),max(1,min(3000,(int)($j['expires_in']??3600)-60)));return $j['access_token'];
     }
-    public static function send(array $device, int $conversation, bool $test=false, ?string $event=null): void {
+    public static function preview(int $conversation, int $user, ?int $message=null): string {
+        global $wpdb;if(!user_can($user,'ctai_agent'))throw new Fault('Agent access denied.',403);$c=Conversations::get($conversation);
+        if (!user_can($user,'ctai_supervise') && (int)$c['assigned_agent']!==$user && $c['status']!=='waiting') { throw new Fault('Conversation access denied.',403); }
+        $where=$wpdb->prepare("conversation_id=%d AND sender='customer' AND visibility='public'",$conversation);
+        if($message!==null)$where.=$wpdb->prepare(' AND id=%d',$message);
+        $row=$wpdb->get_row('SELECT content,metadata FROM '.DB::table('messages')." WHERE $where ORDER BY seq DESC LIMIT 1",ARRAY_A);
+        $text=trim(preg_replace('/\s+/u',' ',wp_strip_all_tags($row['content']??''))??'');
+        $text=preg_replace('/[\x00-\x1f\x7f]/u','',$text)??'';
+        if($text==='')return !empty(json_decode($row['metadata']??'{}',true)['attachment_ids'])?'Customer sent a photo.':'A customer needs support.';
+        return mb_strlen($text)>240?mb_substr($text,0,239).'…':$text;
+    }
+    public static function send(array $device, int $conversation, bool $test=false, ?string $event=null, ?int $message=null): void {
         global $wpdb;if(!Native::valid($device)||empty($device['fcm_token']))throw new Fault('Android device registration is unavailable. Sign in and enable notifications in the app.',409);
         $project=self::config()['service']['project_id']??'';if(!$project)throw new Fault('Configure Firebase first.',503);
         $event=$event??wp_generate_uuid4();
-        $payload=['message'=>['token'=>Push::decrypt($device['fcm_token']),'data'=>['conversation'=>(string)$conversation,'site'=>untrailingslashit(home_url()),'event'=>$event,'test'=>$test?'1':'0'],'android'=>['priority'=>'HIGH','ttl'=>'300s']]];
+        $preview=$test?'Test alert received on this Android app.':self::preview($conversation,(int)$device['user_id'],$message);
+        $payload=['message'=>['token'=>Push::decrypt($device['fcm_token']),'data'=>['conversation'=>(string)$conversation,'site'=>untrailingslashit(home_url()),'event'=>$event,'test'=>$test?'1':'0','preview'=>$preview],'android'=>['priority'=>'HIGH','ttl'=>'300s']]];
         // New clients opt in: Firebase can display alerts while the app is in the
         // background, with the same private content and channel as foreground alerts.
         // Keep data-only delivery for the original APK, whose tap handler expects ints.
         if (!empty($device['system_notifications'])) {
-            $payload['message']['notification']=['title'=>'CrystalTap Agent','body'=>$test?'Test alert received on this Android app.':'A support conversation needs your attention.'];
+            $payload['message']['notification']=['title'=>'CrystalTap Agent','body'=>$preview];
             $payload['message']['android']['notification']=['channel_id'=>'crystaltap_support_v1','sound'=>'crystaltap_alert','icon'=>'ic_notification','tag'=>$event,'visibility'=>'PRIVATE'];
         }
         $r=wp_remote_post('https://fcm.googleapis.com/v1/projects/'.rawurlencode($project).'/messages:send',['timeout'=>15,'redirection'=>0,'sslverify'=>true,'sslcertificates'=>getenv('CTAI_CA_BUNDLE')?:ABSPATH.WPINC.'/certificates/ca-bundle.crt','headers'=>['Authorization'=>'Bearer '.self::access(),'Content-Type'=>'application/json'],'body'=>wp_json_encode($payload)]);
@@ -66,7 +78,8 @@ final class NativePush {
         if(!$p['push']||empty($p[$n['type']])||($start&&$end&&($start<$end?($hour>=$start&&$hour<$end):($hour>=$start||$hour<$end))))return;
         $c=Conversations::get((int)$n['conversation_id']);if(!user_can($n['user_id'],'ctai_supervise')&&(int)$c['assigned_agent']!==(int)$n['user_id']&&$c['status']!=='waiting')return;
         $rows=$wpdb->get_results($wpdb->prepare('SELECT * FROM '.DB::table('native_devices').' WHERE user_id=%d AND fcm_token IS NOT NULL LIMIT 10',$n['user_id']),ARRAY_A);$failed=false;
-        foreach($rows as$row){if(!Native::valid($row)){Native::revoke((int)$row['id'],(int)$row['user_id']);continue;}try{self::send($row,(int)$n['conversation_id'],false,'notification-'.$id);}catch(\Throwable $e){$failed=true;}}
+        $message=preg_match('/^message-(\d+)$/',$n['event_key'],$match)?(int)$match[1]:null;
+        foreach($rows as$row){if(!Native::valid($row)){Native::revoke((int)$row['id'],(int)$row['user_id']);continue;}try{self::send($row,(int)$n['conversation_id'],false,'notification-'.$id,$message);}catch(\Throwable $e){$failed=true;}}
         if($failed)throw new \RuntimeException('Android push retry required');
     }
 }

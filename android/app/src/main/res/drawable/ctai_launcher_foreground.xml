@@ -1,0 +1,3 @@
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:insetLeft="22%" android:insetTop="22%" android:insetRight="22%" android:insetBottom="22%">
+    <bitmap android:src="@drawable/crystaltap_brand" android:gravity="fill"/>
+</inset>
