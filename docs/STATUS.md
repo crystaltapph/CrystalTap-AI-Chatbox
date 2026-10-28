@@ -1,6 +1,6 @@
 # Development candidate status
 
-Version 0.1.2 is a development candidate. The website has not been deployed or modified, no GitHub changes have been pushed, and live OpenAI/push behavior has not been certified.
+Version 0.1.3 is a development candidate. The live website has not been modified by this update, and live OpenAI/push behavior has not been certified.
 
 ## Implemented
 
@@ -18,9 +18,9 @@ Version 0.1.2 is a development candidate. The website has not been deployed or m
 
 The current development target is WordPress 7.1.3 / PHP 8.3 / MariaDB 10.11 and system Chromium on Linux.
 
-- 50 backend integration assertions: migrations, visitor isolation, capabilities, message/notification deduplication, private-note isolation, ownership, state transitions, encryption, SSE decoding, approved retrieval, lead consent, budgets, provider orchestration, streaming callbacks, summaries, takeover fencing, nested rollback and erasure.
+- 71 backend integration assertions: migrations, visitor isolation, capabilities, message/notification deduplication, private-note isolation, ownership, state transitions, encryption, SSE decoding, approved retrieval, lead consent, budgets, provider orchestration, streaming callbacks, summaries, takeover fencing, nested rollback and erasure.
 - Three real competing-process/database scenarios: one claim winner, bounded concurrent budget reservations, and one persisted message for competing duplicate submissions.
-- Four browser/API workflows: customer continuation/isolation/handoff; agent replies and private notes; mobile layout/bell/content/settings; SSE fallback plus CSRF/origin rejection and blocked development-file access.
+- Five browser/API workflows: customer continuation/isolation/handoff; agent replies and private notes; mobile layout/bell/content/settings; explicit audio unlock, new-alert chimes and muting; SSE fallback plus CSRF/origin rejection and blocked development-file access.
 - PHP and JavaScript syntax checks; repeat installation/startup; release ZIP integrity and excluded-file checks.
 
 Deterministic AI tests use a provider substitute and do not prove live API compatibility, answer quality or provider billing. SSE tests validate local transport/decoding and fallback, not live proxy chunk timing. Chromium's phone-sized viewport does not establish physical iPhone/Android behavior.
@@ -51,3 +51,11 @@ The connection test now distinguishes recognized OpenAI quota/billing errors fro
 ## 0.1.2 distribution and diagnostics
 
 The production dependency bundle is now included in GitHub archives as well as installable ZIPs. Both distributions are tested in a fresh WordPress schema through the actual VAPID key-generation endpoint. Administrator diagnostics distinguish missing/unreadable files, unavailable classes and PHP requirements, and identify the active plugin version/directory without exposing secrets. A live host failure still requires its diagnostic result; clean-install tests do not identify a specific host configuration.
+
+## 0.1.3 push delivery and sound
+
+Explicitly online agents remain eligible for new queue alerts after a sleeping browser stops heartbeats. Interactive availability still requires recent activity. Explicit Away/Offline agents are excluded from new queue alerts. Missing cron events are repaired on init without postponing an existing event; a hosting scheduler is still required for predictable background delivery.
+
+Profile now reports current sign-in registration, permission/configuration, push preference, quiet hours, worker schedule/age and the agent's pending push jobs. Its rate-limited push test is restricted to the user's valid current WordPress session and registered endpoint. The test bypasses cron and automatic-alert preferences deliberately. Production sends and tests share the same encryption and verified-TLS transport. Provider responses and credentials are not exposed. A test's acceptance does not establish receipt on a physical device.
+
+Foreground sound is enabled by a user gesture for the current open workspace only. Old alerts and repeated polls do not chime; mute stops new chimes. Closed/locked-phone sound remains controlled by the browser/OS. Five worker checks verify generic notification content, normal system-sound request, test content and click routing. Physical Android/iOS push and sound remain unverified.

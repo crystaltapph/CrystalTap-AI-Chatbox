@@ -1,7 +1,7 @@
 {
   "name": "crystaltap-ai-chatbox",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
-  "scripts": {"test": "playwright test", "check": "node --check assets/app.js && node --check assets/widget.js && node --check mobile/sw.js"},
+  "scripts": {"test": "node tests/push-worker.cjs && playwright test", "check": "node --check assets/app.js && node --check assets/widget.js && node --check mobile/sw.js"},
   "devDependencies": {"@playwright/test": "1.56.1"}
 }

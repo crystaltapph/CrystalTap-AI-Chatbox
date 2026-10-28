@@ -9,6 +9,7 @@
   const mobile = root.classList.contains('ctai-mobile');
   let route = '', selected = null, lastSeq = 0, sending = false, page = 1, filter = 'all', bellItems = [], notificationBefore = 0, installPrompt = null;
   const state = { content: [], settings: null, agents: [] };
+  let audio = null, soundEnabled = false, bellThrough = null;
   const tabs = [['home','Overview','◉'],['inbox','Inbox','▤'],['notifications','Notifications','🔔'],['leads','Leads','◇'],['profile','Profile','○']];
   const more = boot.user.manage ? [['products','Products'],['knowledge','Knowledge base'],['ai','AI configuration'],['widget','Chat widget'],['business','Business information'],['settings','Settings'],['logs','Logs']] : [];
   if (boot.user.supervise) more.unshift(['agents','Live agents'], ['analytics','Analytics']);
@@ -41,7 +42,41 @@
   function pagination(next, prev = page > 1) { return `<div class="ctai-pagination"><button data-page="${page-1}" ${prev ? '' : 'disabled'}>Previous</button><span>Page ${page}</span><button data-page="${page+1}" ${next ? '' : 'disabled'}>Next</button></div>`; }
   async function bell() {
     const data = await api('agent/notifications'); bellItems = data.items;
+    const latest = Math.max(0, ...bellItems.map(item => +item.id));
+    const fresh = bellThrough !== null && bellItems.some(item => +item.id > bellThrough && !item.read_at);
+    bellThrough = Math.max(bellThrough ?? 0, latest);
+    if (fresh && soundEnabled && !document.hidden && audio?.state === 'running') chime();
     const badge = root.querySelector('#ctai-badge'); badge.textContent = data.unread > 99 ? '99+' : data.unread; badge.classList.toggle('has-unread', data.unread > 0);
+  }
+  function chime() {
+    // Audio is unlocked only by the explicit sound button. No customer data is stored.
+    const start = audio.currentTime;
+    for (const [delay,frequency] of [[0,660],[0.18,880]]) {
+      const tone = audio.createOscillator(), gain = audio.createGain();
+      tone.frequency.value = frequency; gain.gain.setValueAtTime(0,start+delay);
+      gain.gain.linearRampToValueAtTime(0.12,start+delay+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001,start+delay+0.25);
+      tone.connect(gain); gain.connect(audio.destination);
+      tone.start(start+delay); tone.stop(start+delay+0.26);
+    }
+  }
+  async function enableSound() {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) throw new Error('In-app sound is unavailable in this browser.');
+    if (!audio) audio = new Audio();
+    await audio.resume();
+    if (audio.state !== 'running') throw new Error('The browser could not enable sound. Tap the sound button again.');
+    soundEnabled = true; chime();
+    message('Test chime played. Sound is enabled for new bell alerts while this workspace stays open and visible. Enable it again after reopening or reloading.',false);
+  }
+  async function testPush() {
+    if (!('serviceWorker' in navigator) || !('Notification' in window) || Notification.permission !== 'granted') throw new Error('Enable push on this device first.');
+    const registration = await navigator.serviceWorker.getRegistration(boot.app);
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) throw new Error('Enable push on this device first.');
+    message('Sending a test notification…',false);
+    const result = await api('agent/push-test','POST',{endpoint:subscription.endpoint});
+    message(result.message,false);
   }
   async function home() {
     const [items, availability, notifications] = await Promise.all([api('agent/conversations?filter=active'), api('agent/availability'), api('agent/notifications')]);
@@ -194,11 +229,25 @@
     bindPages(leads);
   }
   async function profile() {
-    const [prefs,devices,pushConfig]=await Promise.all([api('agent/preferences'),api('agent/devices'),api('agent/push-config')]); state.pushConfig=pushConfig;
-    view.innerHTML=title('Your workspace',boot.user.name)+`<section class="ctai-card"><h2>CrystalTap Agent on your phone</h2><p>Android: use the browser’s Install app option. iPhone: open in Safari, tap Share, then Add to Home Screen. On supported iPhones, open the installed Home Screen app before enabling notifications.</p><div class="ctai-toolbar"><button id="ctai-install">Install app</button><button id="ctai-enable-push">Enable push on this device</button></div><p>Push delivery depends on device support, permissions and operating-system settings. Your notification bell remains available.</p></section><form id="ctai-preferences" class="ctai-card ctai-form"><h2>Notification preferences</h2>${Object.entries(prefs).map(([k,v])=>field(k,label(k),v,typeof v==='boolean'?'checkbox':'time')).join('')}<button class="ctai-primary">Save preferences</button></form><section class="ctai-card"><h2>Registered devices</h2>${table(devices,[['id','Device'],['created_at','Registered',v=>esc(time(v))],['id','Action',v=>`<button data-revoke="${v}">Revoke push</button>`]])}</section>${mobile&&more.length?`<section class="ctai-card"><h2>Management</h2><div class="ctai-toolbar">${more.map(([id,name])=>`<a href="#${id}">${name}</a>`).join('')}</div></section>`:''}<button id="ctai-revoke-other-sessions">Sign out other sessions</button> <a class="ctai-logout" href="${esc(boot.logout)}">Sign out securely →</a>`;
+    const [prefs,devices,pushConfig,pushStatus]=await Promise.all([api('agent/preferences'),api('agent/devices'),api('agent/push-config'),api('agent/push-status')]); state.pushConfig=pushConfig;
+    const permission = 'Notification' in window ? Notification.permission : 'Unsupported';
+    const age = pushStatus.worker_last_run_seconds_ago;
+    const checks = [
+      ['Browser notification permission',permission],['Push service configured',pushConfig.available?'Yes':'No — configure VAPID in Settings'],
+      ['This sign-in registered for push',pushStatus.this_session_registered?'Yes':'No — enable push on this device'],
+      ['Automatic push alerts',prefs.push?'Enabled':'Disabled in preferences'],['Quiet hours active',pushStatus.quiet_hours_now?'Yes — automatic alerts are muted':'No'],
+      ['Background worker scheduled',pushStatus.worker_scheduled?'Yes':'No — contact your site administrator'],
+      ['Background worker last ran',age===null?'Not recorded':age<180?'Recently':Math.floor(age/60)+' minutes ago — check hosting cron'],
+      ['Your pending push alerts',pushStatus.pending_push_jobs]
+    ];
+    view.innerHTML=title('Your workspace',boot.user.name)+`<section class="ctai-card"><h2>CrystalTap Agent on your phone</h2><p>Android: use the browser’s Install app option. iPhone: open in Safari, tap Share, then Add to Home Screen. On supported iPhones, open the installed Home Screen app before enabling notifications.</p><div class="ctai-toolbar"><button id="ctai-install">Install app</button><button id="ctai-enable-push">Enable push on this device</button><button id="ctai-test-push">Test push on this device</button></div><p>Push delivery depends on device support, permissions and operating-system settings. Your notification bell remains available.</p></section><section class="ctai-card"><h2>Push delivery checks</h2>${table(checks.map(([check,result])=>({check,result})),[['check','Check'],['result','Result']])}<p>The push test sends immediately to this device and bypasses quiet hours and preferences. If it arrives but customer alerts do not, check event preferences, Online status and hosting cron. Routine AI-handled chat does not alert agents.</p><button id="ctai-refresh-push">Refresh delivery checks</button></section><section class="ctai-card"><h2>In-app sound</h2><p>Enable a chime for new bell alerts while this workspace is open and visible. Enable it again after reloading. Locked-phone notification sound is controlled by your phone and browser.</p><button id="ctai-test-sound">Enable / test in-app sound</button> <button id="ctai-mute-sound">Mute in-app sound</button></section><form id="ctai-preferences" class="ctai-card ctai-form"><h2>Notification preferences</h2>${Object.entries(prefs).map(([k,v])=>field(k,label(k),v,typeof v==='boolean'?'checkbox':'time')).join('')}<button class="ctai-primary">Save preferences</button></form><section class="ctai-card"><h2>Registered devices</h2>${table(devices,[['id','Device'],['created_at','Registered',v=>esc(time(v))],['id','Action',v=>`<button data-revoke="${v}">Revoke push</button>`]])}</section>${mobile&&more.length?`<section class="ctai-card"><h2>Management</h2><div class="ctai-toolbar">${more.map(([id,name])=>`<a href="#${id}">${name}</a>`).join('')}</div></section>`:''}<button id="ctai-revoke-other-sessions">Sign out other sessions</button> <a class="ctai-logout" href="${esc(boot.logout)}">Sign out securely →</a>`;
     view.querySelector('#ctai-preferences').onsubmit=e=>{e.preventDefault();run(async()=>{const data=Object.fromEntries(new FormData(e.target));for(const[k,v]of Object.entries(prefs))if(typeof v==='boolean')data[k]=e.target.elements[k].checked;await api('agent/preferences','PUT',data);message('Preferences saved.',false);});};
     view.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=()=>run(async()=>{await api(`agent/devices/${b.dataset.revoke}`,'DELETE');await profile();}));
     view.querySelector('#ctai-install').onclick=()=>{if(installPrompt){installPrompt.prompt();installPrompt=null;}else message('Use your browser’s installation menu. iPhone: Safari → Share → Add to Home Screen.',false);};
+    view.querySelector('#ctai-test-push').onclick=e=>run(async()=>{const button=e.currentTarget;button.disabled=true;try{await testPush();}finally{button.disabled=false;}});
+    view.querySelector('#ctai-refresh-push').onclick=()=>run(profile);
+    view.querySelector('#ctai-test-sound').onclick=()=>run(enableSound);
+    view.querySelector('#ctai-mute-sound').onclick=()=>{soundEnabled=false;message('In-app sound muted.',false);};
     view.querySelector('#ctai-enable-push').onclick=()=>run(enablePush);view.querySelector('#ctai-revoke-other-sessions').onclick=()=>run(async()=>{await api('agent/revoke-other-sessions','POST',{});message('Other sessions and their push registrations were revoked.',false);});
   }
   async function enablePush() {
@@ -208,7 +257,11 @@
     const registration=await navigator.serviceWorker.register(boot.app+'sw.js',{scope:boot.app});
     await new Promise((resolve,reject)=>{if(registration.active)return resolve();const worker=registration.installing||registration.waiting;if(!worker)return reject(new Error('Service worker unavailable'));worker.addEventListener('statechange',()=>{if(worker.state==='activated')resolve();if(worker.state==='redundant')reject(new Error('Service worker failed'));});});
     const binary=atob(config.publicKey.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(config.publicKey.length/4)*4,'='));
-    const subscription=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:Uint8Array.from(binary,c=>c.charCodeAt(0))});
+    const key=Uint8Array.from(binary,c=>c.charCodeAt(0));
+    let subscription=await registration.pushManager.getSubscription();
+    const previous=subscription?.options?.applicationServerKey;
+    if(subscription&&previous){const bytes=new Uint8Array(previous);if(bytes.length!==key.length||bytes.some((value,i)=>value!==key[i])){await subscription.unsubscribe();subscription=null;}}
+    if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
     await api('agent/devices','POST',subscription.toJSON());message('This device is registered for eligible support alerts.',false);
   }
   async function agents() { const items=await api('admin/agents');view.innerHTML=title('Live agents','Availability requires an explicit status and a recent heartbeat.')+table(items,[['id','Agent ID'],['name','Name'],['availability','Availability'],['heartbeat','Last seen',v=>esc(time(v))]])+'<div class="ctai-card"><p>Create WordPress users with the CrystalTap Support Agent or Supervisor role in the WordPress Users screen. Agents do not need WordPress administrator access.</p></div>'; }

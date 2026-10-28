@@ -15,7 +15,7 @@ self.addEventListener('fetch', event => {
 });
 self.addEventListener('push', event => {
   let data; try { data = event.data.json(); } catch (_) { return; }
-  event.waitUntil(self.registration.showNotification('CrystalTap Agent', { body: 'A support conversation needs your attention.', tag: String(data.tag || 'ctai-support'), icon: CTAI_ASSETS + 'icon-192.png', data: { conversation: Math.max(0, Number(data.conversation) || 0) } }));
+  event.waitUntil(self.registration.showNotification('CrystalTap Agent', { body: data.test === true ? 'Test notification from CrystalTap. Push reached this device.' : 'A support conversation needs your attention.', silent: false, tag: String(data.tag || 'ctai-support'), icon: CTAI_ASSETS + 'icon-192.png', data: { conversation: Math.max(0, Number(data.conversation) || 0) } }));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();

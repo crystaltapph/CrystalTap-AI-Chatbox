@@ -19,8 +19,9 @@ final class Notifications {
         $profiles = DB::table('agent_profiles');
         foreach (get_users(['capability' => 'ctai_agent', 'fields' => 'ID']) as $id) {
             $p = $wpdb->get_row($wpdb->prepare("SELECT * FROM $profiles WHERE user_id=%d", $id), ARRAY_A);
-            // Supervisors receive durable queue notifications even when no agent is available.
-            if (user_can($id, 'ctai_supervise') || ($p && $p['availability'] === 'online' && strtotime($p['heartbeat'] . ' UTC') > time() - 180)) { self::emit((int) $id, $key, $conversation, $type, $title); }
+            // Sleeping phones stop heartbeats. Keep alerts for explicitly online agents;
+            // interactive availability still uses fresh heartbeats elsewhere.
+            if (user_can($id, 'ctai_supervise') || ($p && $p['availability'] === 'online')) { self::emit((int) $id, $key, $conversation, $type, $title); }
         }
     }
     public static function job(string $key, string $type, array $payload): void {

@@ -90,3 +90,32 @@ test('public SSE fallback completes cleanly and mutation CSRF is enforced',async
     const denied=await request.get('/wp-content/plugins/crystaltap-ai-chatbox/'+path);expect([403,404]).toContain(denied.status());
   }
 });
+
+test('profile separates push delivery checks and opt-in foreground sound',async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.addInitScript(()=>{
+    const Native=window.AudioContext;
+    window.__tones=0;
+    window.AudioContext=class extends Native {
+      createOscillator(){const tone=super.createOscillator();const start=tone.start.bind(tone);tone.start=(...args)=>{window.__tones++;return start(...args);};return tone;}
+    };
+  });
+  let id=100;
+  await page.route('**/crystaltap-ai/v1/agent/notifications',r=>r.fulfill({json:{unread:1,items:[{id,read_at:null,title:'Test notification'}]}}));
+  await signIn(page);await page.goto('/crystaltap-agent/#profile');
+  await expect(page.getByRole('heading',{name:'Push delivery checks'})).toBeVisible();
+  expect(await page.evaluate(()=>window.__tones)).toBe(0);
+  await page.getByRole('button',{name:'Enable / test in-app sound',exact:true}).click();
+  await expect(page.locator('#ctai-alert')).toContainText('Test chime played');
+  expect(await page.evaluate(()=>window.__tones)).toBe(2);
+  await page.clock.install();
+  await page.clock.runFor(6000);expect(await page.evaluate(()=>window.__tones)).toBe(2);
+  id=101;await page.clock.runFor(6000);
+  await expect.poll(()=>page.evaluate(()=>window.__tones)).toBe(4);
+  await page.clock.runFor(6000);expect(await page.evaluate(()=>window.__tones)).toBe(4);
+  await page.getByRole('button',{name:'Mute in-app sound',exact:true}).click();
+  id=102;await page.clock.runFor(6000);expect(await page.evaluate(()=>window.__tones)).toBe(4);
+  await page.getByRole('button',{name:'Test push on this device',exact:true}).click();
+  await expect(page.locator('#ctai-alert')).toContainText('Enable push on this device first');
+  expect(errors).toEqual([]);
+});

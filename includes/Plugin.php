@@ -27,6 +27,7 @@ final class Plugin {
     public static function boot(): void {
         add_filter('cron_schedules', static function ($s) { $s['ctai_minute'] = ['interval' => 60, 'display' => 'Every minute']; return $s; });
         add_action('init', [self::class, 'rewrite']);
+        add_action('init', [self::class, 'ensureSchedule']);
         add_action('admin_init', static function () { if (current_user_can('ctai_manage') && get_option('ctai_schema') !== CTAI_VERSION) { DB::migrate(); } });
         add_action('rest_api_init', [API::class, 'register']);
         add_filter('rest_post_dispatch', static function ($response, $server, $request) {
@@ -67,6 +68,11 @@ final class Plugin {
         add_filter('wp_privacy_personal_data_exporters', [Privacy::class, 'exporter']);
         add_filter('wp_privacy_personal_data_erasers', [Privacy::class, 'eraser']);
         add_action('admin_init', static function () { if (function_exists('wp_add_privacy_policy_content')) { wp_add_privacy_policy_content('CrystalTap AI', wpautop(esc_html(Settings::get()['privacy_notice']))); } });
+    }
+    public static function ensureSchedule(): void {
+        // Updates do not always run the activation hook. Repair missing events only.
+        if (!wp_next_scheduled('ctai_tick')) { wp_schedule_event(time() + 60, 'ctai_minute', 'ctai_tick'); }
+        if (!wp_next_scheduled('ctai_cleanup')) { wp_schedule_event(time() + 3600, 'daily', 'ctai_cleanup'); }
     }
     public static function rewrite(): void { add_rewrite_rule('^crystaltap-agent(?:/(.*))?/?$', 'index.php?ctai_app=1', 'top'); add_rewrite_tag('%ctai_app%', '([01])'); }
     public static function bootstrap(): array {

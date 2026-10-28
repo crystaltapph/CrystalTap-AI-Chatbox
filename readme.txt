@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,9 @@ Browser/OS installation and push support vary. Physical-device testing is requir
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.1.3 =
+Keep support alerts for explicitly online agents while their phone sleeps, repair missing cron events, and add secure device push testing, delivery checks and optional foreground sound.
 
 = 0.1.2 =
 Bundle production libraries in GitHub archives and report precise Web Push file, class and PHP requirement diagnostics.

@@ -77,3 +77,28 @@ Disable AI in settings to stop new provider calls; human support stays available
 ## Web Push dependency diagnostics
 
 Version 0.1.2 adds plugin_version, plugin_directory, push_ready, push_vapid_class, push_missing_extensions and push_diagnostic to the administrator-only Environment health view. The active copy must report version 0.1.2 or newer. Missing/unreadable files require restoring the complete dependency bundle or correcting filesystem access. Present files with unavailable classes need investigation of stale active copies/autoload conflicts. Missing PHP extensions or disabled OpenSSL functions require hosting configuration. These checks report no credentials or absolute server paths. They do not prove actual device push delivery.
+
+## Namecheap scheduling and push troubleshooting
+
+On Namecheap cPanel hosting, open cPanel → Advanced → Cron Jobs. The intended worker interval is every minute (`* * * * *`), but shared plans may restrict how frequently jobs run. Confirm the permitted minimum with Namecheap support before adding a job. If the minimum is five minutes, use `*/5 * * * *` and expect notification delays. EasyWP has a different hosting interface; ask support for its supported scheduler rather than assuming cPanel is available.
+
+A PHP cron command has this form (example placeholders, not a command to paste unchanged):
+
+```sh
+/ABSOLUTE/PATH/TO/php -q /home/CPANEL_USERNAME/WORDPRESS_FOLDER/wp-cron.php
+```
+
+Use the site's actual document root and a PHP CLI binary matching its supported PHP version. Namecheap support can supply both. Do not copy the development Docker paths. Do not add a second scheduler if one already runs WordPress cron. Leave traffic-driven WP-Cron enabled until the real job is verified.
+
+Copyable support request:
+
+> Please check my WordPress site's background scheduler. Configure wp-cron.php using the correct PHP CLI binary and document root at the shortest interval my plan permits, ideally every minute. Please confirm whether one-minute cron is allowed and verify that the ctai_tick WordPress event runs. Also confirm outbound HTTPS access to my browser's push service (Android Chrome normally uses fcm.googleapis.com), with TLS verification enabled.
+
+After installing 0.1.3, reopen the agent app and accept its update when ready. In Profile, enable push on the device again, then use Test push on this device. This is an intentional visible test; it bypasses quiet hours and automatic event preferences, targets only the current session's registered endpoint, and is limited to three attempts per minute.
+
+- If the test reports an error, follow its configuration/registration or hosting guidance. No provider response bodies or private keys are displayed.
+- If accepted but no notification reaches the tray, inspect browser permission, worker update and OS delivery restrictions. Acceptance is not device receipt.
+- If the test arrives but real support alerts do not, set Online, enable the relevant notification preferences, check quiet hours, and inspect Background worker last ran / pending alerts in Profile. Ask for human support from a separate visitor browser. Routine AI-only chat does not generate agent alerts. A worker age over three minutes suggests a scheduler delay; it does not by itself identify its cause.
+- For a sound while the workspace is open and visible, enable the optional in-app sound in Profile. It requires an explicit gesture after each page reload. Locked-phone notification sound uses the browser/OS notification channel; Web Push does not supply a custom ringtone.
+
+The plugin can repair a missing WordPress cron event, but cannot create a hosting-account scheduler. Development tests do not access the live Namecheap account or verify physical-phone delivery.

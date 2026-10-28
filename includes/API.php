@@ -107,6 +107,13 @@ final class API {
             return $prefs;
         });
         self::route('/agent/push-config', 'GET', static fn() => ['publicKey' => Settings::get()['vapid_public'], 'available' => Dependencies::pushStatus()['ready'] && (bool) Settings::secret('vapid_private')]);
+        self::route('/agent/push-status', 'GET', static fn() => Push::diagnostics(get_current_user_id()));
+        self::route('/agent/push-test', 'POST', static function ($r) {
+            Auth::rate('push_test', 3, 60, (string) get_current_user_id());
+            $b = self::input($r); $endpoint = $b['endpoint'] ?? '';
+            if (!is_string($endpoint) || !$endpoint || strlen($endpoint) > 2000) { throw new Fault('Enable push on this device before testing.'); }
+            return Push::test(get_current_user_id(), $endpoint);
+        });
         self::route('/agent/devices', 'POST', static function ($r) { Auth::rate('devices', 10, 3600, (string) get_current_user_id()); return Push::register(get_current_user_id(), self::input($r)); });
         self::route('/agent/devices', 'GET', static function () { global $wpdb; return $wpdb->get_results($wpdb->prepare('SELECT id,created_at FROM ' . DB::table('push_subscriptions') . ' WHERE user_id=%d ORDER BY id DESC', get_current_user_id()), ARRAY_A); });
         self::route('/agent/devices/(?P<id>\d+)', 'DELETE', static function ($r) { global $wpdb; $wpdb->delete(DB::table('push_subscriptions'), ['id' => (int) $r['id'], 'user_id' => get_current_user_id()]); DB::audit('device_revoked', (int) $r['id']); return ['revoked' => true]; });
