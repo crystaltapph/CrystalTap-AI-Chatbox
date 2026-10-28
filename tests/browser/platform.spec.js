@@ -72,7 +72,7 @@ test('customer widget resumes, sends, hands off and rejects a different visitor'
   expect(denied.status()).toBe(404);await other.close();
   await page.reload();
   await expect(page.locator('.ctai-customer')).toContainText('Browser test: need a purifier');
-  await page.locator('.ctai-tools').getByRole('button',{name:'Talk to a person',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Talk to a person',exact:true})).toBeHidden();
   await expect(page.locator('.ctai-status')).toHaveText('Waiting for an agent');
   expect(errors).toEqual([]);
 });
@@ -82,7 +82,7 @@ test('WordPress agent takes over and replies to a visitor; notes stay private',a
   await customer.getByRole('textbox',{name:'Message',exact:true}).fill('Browser conversation requiring support');
   await customer.getByRole('button',{name:'Send',exact:true}).click();
   await expect(customer.locator('.ctai-customer')).toBeVisible();
-  await customer.locator('.ctai-tools').getByRole('button',{name:'Talk to a person',exact:true}).click();
+  await expect(customer.getByRole('button',{name:'Talk to a person',exact:true})).toBeHidden();
   const data=await customer.evaluate(async()=>{return(await fetch('/wp-json/crystaltap-ai/v1/public/session')).json();});const id=data.conversations[0].id;
   await signIn(page);await page.goto('/crystaltap-agent/#conversation/'+id);
   await expect(page.getByRole('heading',{name:'Conversation #'+id})).toBeVisible();

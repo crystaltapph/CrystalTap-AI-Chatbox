@@ -1,11 +1,11 @@
 # CrystalTap AI Chatbox + Android Agent
 
-WordPress customer chat, a browser agent dashboard, and a dedicated **CrystalTap Agent Android app**. Plugin **0.3.0** adds Firebase live update signals alongside native Firebase Cloud Messaging. Existing customer conversations, leads, private images and settings are retained. This is a locally tested candidate; live deployment and physical-phone notification tests remain required.
+WordPress customer chat, a browser agent dashboard, and a dedicated **CrystalTap Agent Android app**. Plugin **0.3.1** adds Firebase live update signals alongside native Firebase Cloud Messaging. Existing customer conversations, leads, private images and settings are retained. This is a locally tested candidate; live deployment and physical-phone notification tests remain required.
 
 ## Install the update
 
-1. Back up the website and database. Install `dist/crystaltap-ai-chatbox-0.3.0.zip` in WordPress, keeping only one CrystalTap plugin copy active.
-2. Install `dist/CrystalTap-Agent-0.1.4.apk` on the Android phone (Android 8+). The candidate APK is signed; retain its signing identity for future updates.
+1. Back up the website and database. Install `dist/crystaltap-ai-chatbox-0.3.1.zip` in WordPress, keeping only one CrystalTap plugin copy active.
+2. Install `dist/CrystalTap-Agent-0.1.5.apk` on the Android phone (Android 8+). The candidate APK is signed; retain its signing identity for future updates.
 3. Open the app. The website is preset to `https://crystaltapwater.com/`. Continue to the WordPress browser sign-in and approve the code only if it matches the app. Return to the app.
 4. Create/configure Firebase as described in [Android setup](docs/ANDROID.md). Without Firebase, chat and the browser dashboard work, but remote Android push does not.
 5. Enable notifications in the app, set Online, test local sound, then test Firebase push and a real visitor request for human support. A functioning hosting scheduler is still needed.
@@ -15,6 +15,10 @@ Version 0.2.1 restores alerts for customer messages in an unclaimed support queu
 Android app **0.1.2** refreshes the native interface with a card-based inbox, persistent bottom navigation, aligned chat bubbles, a clearer composer and grouped notification/account settings. [See the UI and rendered previews](docs/ANDROID-UI.md). It works with plugin 0.2.1.
 
 The WordPress page `/crystaltap-agent/` remains a browser workspace and device-approval page. It has no install prompt, manifest or offline cache. Opening it unregisters the old CrystalTap worker; a minimal retirement worker is retained for existing installations. Remove the old PWA/home-screen shortcut manually. Other site workers are left untouched.
+
+## Widget cleanup and Android Leads fix (0.3.1 / 0.1.5)
+
+The floating launcher contains only its icon; personalized welcome text stays inside the conversation. Customer chat hides fallback connection text and, when AI is off, hides both the handoff button and matching suggested question plus Support update messages. Android reads lead lists as JSON arrays, including empty lists, and reports invalid website responses separately from network failures. Install the updated plugin first, clear the website/page cache, then install APK 0.1.5 over the current app without uninstalling.
 
 ## Firebase live chat (0.3.0 / 0.1.4)
 

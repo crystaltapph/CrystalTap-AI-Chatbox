@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -51,6 +51,9 @@ Native Android push needs Firebase configuration and Google Play services. Physi
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.3.1 =
+Use an icon-only launcher, hide fallback connection text, and hide human-handoff controls and system updates when AI is disabled. Fix Android 0.1.5 lead-list response handling.
 
 = 0.3.0 =
 Add scoped Firebase live update signals for customer chat, the browser workspace and Android 0.1.4. Publish after message commits with a durable retry queue, short-lived custom-token access, reconnect recovery and polling fallback. Retain cron for push notifications, retries and maintenance.

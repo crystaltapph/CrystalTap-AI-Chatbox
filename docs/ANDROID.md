@@ -77,7 +77,7 @@ No new manifest/install/offline/push feature is served. The old manifest returns
 
 ## Signing and reproducible builds
 
-Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.4.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
+Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.5.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
 
 The build creates a local candidate signing identity in `.runtime/android-signing.jks` with its private password in `.runtime/android-signing.json`. Both are mode 0600 and ignored by Git. Back them up securely outside the checkout before replacing the environment. **Future APK updates must use the same signing key.** Do not publish those files or cache them in public CI artifacts. A fresh CI build creates a different candidate identity; its APK is a test artifact, not an update for an already distributed build. Google Play distribution needs its own account, policy review and release-signing plan.
 
@@ -86,3 +86,7 @@ The app blocks screenshots and backups of its private session. Image files are s
 ## Instrumented emulator checks
 
 `android/app/src/androidTest` contains three checks for native launch/site preset, Android Keystore session encryption, and the app's actual local notification channel/custom-sound URI. On the dedicated disposable `CrystalTap_Api28` emulator, run `python3 scripts/android_device_test.py` (or `--container ctai-android-smoke` for the isolated cloud emulator). The script refuses physical phones and other AVD names and reinstalls only its test packages. The cloud has no KVM; software-only API 35 and API 28 boot attempts did not complete, so the three device checks were compiled but not run. The optional fixture uses API 28 and needs a working emulator on a supported development machine. No emulator check establishes audible output from a real speaker or live Firebase delivery.
+
+## Leads fix (0.1.5)
+
+The app now accepts the lead endpoint's array response, including empty lists. Invalid JSON or unexpected response shapes report a safe website-response error instead of a misleading network failure. Tests exercise actual API parsing and the Leads screen, with empty-list and permission-denial cases. APK 0.1.5 retains the prior signing identity.

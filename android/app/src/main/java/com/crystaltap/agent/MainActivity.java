@@ -196,7 +196,7 @@ public final class MainActivity extends Activity {
             card.setOnClickListener(v->task(()->api.request("agent/notifications/"+n.getInt("id")+"/read","PUT",new JSONObject()),r->openConversation(n.optInt("conversation_id"))));card.setFocusable(true);body.addView(card);
         }
     }
-    private void leads(){screen("Customer leads");pageTitle("Customer leads","Keep every inquiry moving forward.");task(()->api.get("agent/leads"),value->renderLeads((JSONArray)value));}
+    private void leads(){screen("Customer leads");pageTitle("Customer leads","Keep every inquiry moving forward.");task(()->api.getArray("agent/leads"),value->renderLeads((JSONArray)value));}
     private void renderLeads(JSONArray items)throws Exception{
         if(items.length()==0){empty(body,"leads","Ready for new connections","Customer inquiries assigned to you appear here.");return;}
         for(int i=0;i<items.length();i++){

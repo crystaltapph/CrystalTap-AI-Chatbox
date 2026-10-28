@@ -1,0 +1,11 @@
+const {test,expect}=require('@playwright/test');
+// Full browser runs can exhaust shared localhost session throttles; reset only guarded local fixtures.
+test.beforeEach(()=>require('./global-setup')());
+test('launcher stays icon-only and AI-disabled history hides handoff and support updates',async({page})=>{
+ await page.route('**/assets/realtime.js*',r=>r.fulfill({contentType:'application/javascript',body:`window.CTAILive={connect(c){c.status('fallback');return{close(){}};}};`}));
+ let ai=false;await page.route('**/public/conversations/*/messages*',async r=>{const response=await r.fetch();const data=await response.json();data.ai_enabled=ai;data.messages=[{id:ai?99992:99991,seq:ai?99992:99991,sender:'system',visibility:'public',content:'Support fallback fixture',created_at:'2026-10-28 10:00:00'}];await r.fulfill({response,json:data});});
+ await page.goto('/');const launcher=page.getByRole('button',{name:'Chat with CrystalTap',exact:true});await expect(launcher).toBeVisible();await expect(launcher).not.toContainText('Welcome');await expect(page.locator('.ctai-launcher-text')).toHaveCount(0);const rect=await launcher.boundingBox();expect(rect.width).toBeLessThanOrEqual(64);await launcher.click();const form=page.getByRole('form',{name:'Customer details'});await form.getByLabel('Name (required)',{exact:true}).fill('Clean Widget Fixture');await form.getByRole('button',{name:'Start chat',exact:true}).click();await expect(page.locator('.ctai-welcome')).toContainText('Clean Widget Fixture');await expect(page.getByRole('button',{name:'Talk to a person',exact:true})).toBeHidden();await expect(page.locator('.ctai-system')).toHaveCount(0);await expect(page.locator('.ctai-live-status')).toBeEmpty();
+ // Changing the authoritative history mode also restores AI-only actions on the next refresh.
+ ai=true;await expect(page.locator('.ctai-tools').getByRole('button',{name:'Talk to a person',exact:true})).toBeVisible({timeout:16000});await expect(page.locator('.ctai-system')).toHaveCount(1);
+ ai=false;await expect(page.locator('.ctai-tools').getByRole('button',{name:'Talk to a person',exact:true})).toBeHidden({timeout:16000});await expect(page.locator('.ctai-system')).toHaveCount(0);await expect(page.locator('.ctai-chips button').filter({hasText:'Talk to a person'})).toBeHidden();
+});

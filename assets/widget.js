@@ -20,10 +20,10 @@
   root.style.setProperty('--ctai-height', `${cfg.height}px`);
   let open = embedded, csrf = '', conversation = null, lastSeq = 0, timer, pending = null, busy = false, initialized = false, conversationEpoch = 0, sessionExpired = false, customer = null, agent = null, agentFor = null, agentTyping = false, expanded = false, savedOverflow = null;
   const launcher = button('Chat with CrystalTap', 'ctai-launcher', () => toggle(true));
-  const launcherText=el('span','ctai-launcher-text','Chat with CrystalTap');launcher.replaceChildren();
+  launcher.replaceChildren();
   const launcherIcon=cfg.launcher_icon?el('img','ctai-launcher-image'):el('span','ctai-launcher-symbol','💬');
   if(cfg.launcher_icon){launcherIcon.src=cfg.launcher_icon;launcherIcon.alt='';}else launcherIcon.setAttribute('aria-hidden','true');
-  launcher.append(launcherIcon,launcherText);launcher.setAttribute('aria-label','Chat with CrystalTap');
+  launcher.append(launcherIcon);launcher.setAttribute('aria-label','Chat with CrystalTap');
   launcher.setAttribute('aria-expanded', 'false');
   launcher.setAttribute('aria-controls', 'ctai-chat-panel');
   const panel = el('section', 'ctai-panel'); panel.id = 'ctai-chat-panel'; panel.setAttribute('aria-label', 'CrystalTap customer support');
@@ -110,7 +110,7 @@
   panel.append(header, prechat, messages, channels, error, tools, peerTyping, thinking, dock); root.append(launcher, panel);
   ui.watchTyping(peerTyping,async()=>{const id=conversation?.id,epoch=conversationEpoch;const typing=!!(id&&!busy&&(await api(`public/conversations/${id}/typing`)).agent);if(epoch!==conversationEpoch||id!==conversation?.id)return false;agentTyping=typing;updateStatus();return typing;},()=>currentAgent()?.name||'Support agent');
   function liveChange(){liveDirty=true;clearTimeout(liveTimer);if(!busy&&conversation&&open&&!document.hidden)liveTimer=setTimeout(async()=>{if(busy)return;liveDirty=false;try{await refresh();}catch(_){/* Normal polling surfaces connection/session errors. */}},80);}
-  function startLive(){if(live||!open||document.hidden||!initialized||!window.CTAILive)return;live=window.CTAILive.connect({grant:()=>api('public/realtime','POST',{}),change:liveChange,status:state=>{liveConnected=state==='live';liveStatus.textContent=state==='live'?'● Live':state==='polling'?'':state==='connecting'?'Connecting live updates…':'Regular refresh active';}});}
+  function startLive(){if(live||!open||document.hidden||!initialized||!window.CTAILive)return;live=window.CTAILive.connect({grant:()=>api('public/realtime','POST',{}),change:liveChange,status:state=>{liveConnected=state==='live';liveStatus.textContent=state==='live'?'● Live':'';}});}
   function stopLive(){live?.close();live=null;liveConnected=false;clearTimeout(liveTimer);liveStatus.textContent='';}
   async function api(path, method = 'GET', data) {
     const response = await fetch(boot.api + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-CTAI-CSRF': csrf }, body: data === undefined ? undefined : JSON.stringify(data) });
@@ -169,13 +169,13 @@
     }else nextStatus=conversation?labels[conversation.status]||'Customer support':cfg.ai_enabled?'AI and human support':'Customer support';
     if(status.textContent!==nextStatus)status.textContent=nextStatus;
     const ended = conversation && ['resolved','closed'].includes(conversation.status);
-    const identifying=!conversation;prechat.hidden=!identifying;messages.hidden=identifying;tools.hidden=identifying;dock.hidden=identifying;startChat.disabled=busy||!navigator.onLine;human.disabled=!!ended;const target=identifying?panel:moreBody;if(notice.parentNode!==target){if(identifying)panel.insertBefore(notice,channels);else moreBody.append(notice);}
+    const identifying=!conversation;prechat.hidden=!identifying;messages.hidden=identifying;tools.hidden=identifying;dock.hidden=identifying;startChat.disabled=busy||!navigator.onLine;human.disabled=!!ended;human.hidden=!cfg.ai_enabled;for(const chip of chips.querySelectorAll('button'))if(chip.textContent.trim().toLowerCase()==='talk to a person')chip.hidden=!cfg.ai_enabled;const target=identifying?panel:moreBody;if(notice.parentNode!==target){if(identifying)panel.insertBefore(notice,channels);else moreBody.append(notice);}
     attachments.lock(busy||sessionExpired||!!ended||!navigator.onLine);
     input.disabled = sessionExpired || !!ended || busy || !navigator.onLine; send.disabled = input.disabled;
     input.placeholder = ended ? 'Start a new chat to continue' : 'Type your question…';
   }
   function appendMessage(m) {
-    if(m.sender==='system'&&cfg.ai_enabled===false)return;
+    if(m.sender==='system'&&!cfg.ai_enabled)return;
     if(!String(m.content||'').trim()&&!m.attachments?.length&&!m.products?.length)return;
     const bubble = el('article', `ctai-bubble ctai-${m.sender}`);
     const label = {customer: 'You', ai: cfg.bot_name, agent: 'CrystalTap support', system: 'Support update'}[m.sender] || 'Support';
@@ -230,5 +230,4 @@
   window.addEventListener('offline', () => { error.textContent = 'You are offline. Your message has not been sent.'; updateStatus(); });
   panel.hidden = !open; launcher.hidden = open;
   if (embedded) toggle(true);
-  else if (boot.autoGreeting) { launcherText.textContent = welcomeText(); }
 })();
