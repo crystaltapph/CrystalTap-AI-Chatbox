@@ -9,7 +9,7 @@ import zipfile
 
 os.chdir(Path(__file__).resolve().parents[1])
 parser=argparse.ArgumentParser()
-parser.add_argument('--artifact',default='dist/crystaltap-ai-chatbox-0.2.2.zip')
+parser.add_argument('--artifact',default='dist/crystaltap-ai-chatbox-0.2.3.zip')
 artifact=Path(parser.parse_args().artifact).resolve()
 root=Path.cwd()
 relative=artifact.relative_to(root)

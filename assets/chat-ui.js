@@ -46,7 +46,7 @@
       clear(){selected.length=0;status.textContent='';render();}
     };
   }
-  function typing(node,active,label){node.textContent=active?label+' is typing…':'';node.classList.toggle('is-typing',!!active);}
-  function watchTyping(node,read,label){let busy=false;const timer=setInterval(async()=>{if(busy||document.hidden||!navigator.onLine||!node.isConnected)return;busy=true;try{typing(node,await read(),label);}catch(_){}finally{busy=false;}},2000);disposers.set(node,()=>clearInterval(timer));}
+  function typing(node,active,label){const value=active?label+' is typing…':'';if(node.textContent!==value)node.textContent=value;node.classList.toggle('is-typing',!!active);}
+  function watchTyping(node,read,label){let busy=false;const timer=setInterval(async()=>{if(busy||document.hidden||!navigator.onLine||!node.isConnected)return;busy=true;try{typing(node,await read(),typeof label==='function'?label():label);}catch(_){}finally{busy=false;}},2000);disposers.set(node,()=>clearInterval(timer));}
   window.CTAIChatUI={text,images,composer,typing,watchTyping};
 })();

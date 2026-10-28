@@ -64,7 +64,11 @@ final class AI {
         $s = Settings::get();
         $c = Conversations::get($id);
         if ($c['status'] !== 'ai_active' || (int) $c['generation'] !== $generation) { return; }
-        if (!$s['ai_enabled'] || !Settings::secret('openai_key')) {
+        if (!$s['ai_enabled']) {
+            Conversations::handoff($id);
+            return;
+        }
+        if (!Settings::secret('openai_key')) {
             self::fallback($id, 'AI assistance is currently unavailable. You can request a human representative below.', (int) $c['generation'], $messageId);
             return;
         }

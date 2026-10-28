@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.2.2
+Stable tag: 0.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,9 @@ Native Android push needs Firebase configuration and Google Play services. Physi
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.2.3 =
+Add configurable {name} welcome messages, actual assigned-agent status and typing names, a larger responsive chat window with maximize controls, and compact secondary options. Hide AI-disabled support updates and remove the external-app disclaimer.
 
 = 0.2.2 =
 Require a customer name before starting a new chat; offer optional email and phone. Display saved details to authorized agents and include public customer message previews in Android alerts. Support the new branded Android 0.1.3 app.

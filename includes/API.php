@@ -60,15 +60,15 @@ final class API {
             global $wpdb;
             $s = Auth::session(true);
             $rows = $wpdb->get_results($wpdb->prepare('SELECT * FROM ' . DB::table('conversations') . " WHERE session_id=%d AND status<>'closed' ORDER BY id DESC LIMIT 5", $s['id']), ARRAY_A);
-            return ['csrf' => $s['csrf'], 'config' => Settings::publicConfig(), 'conversations' => array_map([Conversations::class, 'view'], $rows), 'customer'=>$rows?Customer::details($rows[0]):null];
+            return ['csrf' => $s['csrf'], 'config' => Settings::publicConfig(), 'conversations' => array_map(static fn($c)=>Conversations::view($c)+['customer'=>Customer::details($c)], $rows), 'customer'=>$rows?Customer::details($rows[0]):null];
         }, 'public');
         self::route('/public/session', 'DELETE', static function ($r) {
             global $wpdb; $s = Auth::visitor($r); $wpdb->delete(DB::table('sessions'), ['id' => $s['id']]); unset($_COOKIE[Auth::COOKIE]); return ['revoked' => true];
         }, 'visitor');
-        self::route('/public/conversations', 'POST', static fn($r) => Conversations::start((int) Auth::visitor($r)['id'],self::input($r)), 'visitor');
+        self::route('/public/conversations', 'POST', static function($r){$c=Conversations::start((int)Auth::visitor($r)['id'],self::input($r));return $c+['customer'=>Customer::details(Conversations::get((int)$c['id']))];}, 'visitor');
         self::route('/public/conversations/(?P<id>\d+)/messages', 'GET', static function ($r) {
             $c = Conversations::owned((int) $r['id'], (int) Auth::visitor($r)['id']);
-            return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after'])), 'typing'=>Typing::state($c)];
+            return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after'])), 'typing'=>Typing::state($c),'agent'=>Conversations::publicAgent($c),'customer'=>Customer::details($c),'ai_enabled'=>(bool)Settings::get()['ai_enabled']];
         }, 'visitor');
         self::route('/public/conversations/(?P<id>\d+)/messages', 'POST', static function ($r) {
             Conversations::owned((int) $r['id'], (int) Auth::visitor($r)['id']); $b = self::input($r);

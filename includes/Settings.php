@@ -4,9 +4,16 @@ defined('ABSPATH') || exit;
 
 final class Settings {
     public static function defaults(): array {
-        return ['business_name' => 'CrystalTap', 'bot_name' => 'CrystalTap Assistant', 'welcome' => 'Hello po! How can we help you today?', 'suggestions' => ['Help me choose a purifier', 'Delivery and installation', 'Talk to a person'], 'color' => '#087f83', 'position' => 'right', 'offset' => 20, 'mobile_offset' => 16, 'width' => 380, 'height' => 580, 'logo' => '', 'launcher_icon' => '', 'disabled_pages' => [], 'widget_enabled' => true, 'auto_greeting' => false, 'summarization_enabled' => true, 'streaming_enabled' => false, 'ai_enabled' => false, 'model' => 'gpt-4.1-mini', 'reasoning' => '', 'max_output_tokens' => 600, 'context_messages' => 16, 'retry_limit' => 1, 'timeout' => 35, 'daily_budget' => 5, 'monthly_budget' => 75, 'input_price' => 0.4, 'output_price' => 1.6, 'session_hours' => 72, 'retention_days' => 90, 'session_limit' => 100, 'poll_seconds' => 5, 'followup_minutes' => 5, 'support_hours' => '', 'contact' => '', 'instructions' => '', 'privacy_notice' => 'Messages and contact details are stored to provide customer support. Relevant messages may be sent to OpenAI when AI assistance is enabled. Short public customer message previews may be sent to Firebase for staff notifications. Contact us to request access or deletion. Please do not send payment details or sensitive personal information.', 'vapid_public' => '', 'vapid_subject' => '', 'quiet_start' => '', 'quiet_end' => '', 'whatsapp_number' => '', 'messenger_url' => '', 'viber_number' => '', 'viber_url' => ''];
+        return ['business_name' => 'CrystalTap', 'bot_name' => 'CrystalTap Assistant', 'welcome' => 'Welcome, {name}! How can we help you today?', 'suggestions' => ['Help me choose a purifier', 'Delivery and installation', 'Talk to a person'], 'color' => '#087f83', 'position' => 'right', 'offset' => 20, 'mobile_offset' => 16, 'width' => 480, 'height' => 740, 'logo' => '', 'launcher_icon' => '', 'disabled_pages' => [], 'widget_enabled' => true, 'auto_greeting' => false, 'widget_layout_revision' => 1, 'summarization_enabled' => true, 'streaming_enabled' => false, 'ai_enabled' => false, 'model' => 'gpt-4.1-mini', 'reasoning' => '', 'max_output_tokens' => 600, 'context_messages' => 16, 'retry_limit' => 1, 'timeout' => 35, 'daily_budget' => 5, 'monthly_budget' => 75, 'input_price' => 0.4, 'output_price' => 1.6, 'session_hours' => 72, 'retention_days' => 90, 'session_limit' => 100, 'poll_seconds' => 5, 'followup_minutes' => 5, 'support_hours' => '', 'contact' => '', 'instructions' => '', 'privacy_notice' => 'Messages and contact details are stored to provide customer support. Relevant messages may be sent to OpenAI when AI assistance is enabled. Short public customer message previews may be sent to Firebase for staff notifications. Contact us to request access or deletion. Please do not send payment details or sensitive personal information.', 'vapid_public' => '', 'vapid_subject' => '', 'quiet_start' => '', 'quiet_end' => '', 'whatsapp_number' => '', 'messenger_url' => '', 'viber_number' => '', 'viber_url' => ''];
     }
-    public static function get(): array { return apply_filters('ctai_settings', array_replace(self::defaults(), (array) get_option('ctai_settings', []))); }
+    public static function get(): array {
+        $stored=(array)get_option('ctai_settings',[]);$settings=array_replace(self::defaults(),$stored);$legacy=!isset($stored['widget_layout_revision']);
+        // Upgrade the former stock/empty greeting and compact default dimensions.
+        // Explicitly customized messages and dimensions continue to be used.
+        if(trim((string)$settings['welcome'])===''||($legacy&&$settings['welcome']==='Hello po! How can we help you today?'))$settings['welcome']=self::defaults()['welcome'];
+        if($legacy&&(int)$settings['width']===380&&(int)$settings['height']===580){$settings['width']=480;$settings['height']=740;}
+        return apply_filters('ctai_settings',$settings);
+    }
     public static function secret(string $name): string {
         $constant = 'CTAI_' . strtoupper($name);
         if (defined($constant)) { return (string) constant($constant); }
@@ -25,7 +32,7 @@ final class Settings {
     }
     public static function publicConfig(): array {
         $settings = self::get();
-        return array_intersect_key($settings, array_flip(['business_name','bot_name','welcome','suggestions','color','position','offset','mobile_offset','width','height','logo','launcher_icon','privacy_notice','poll_seconds','streaming_enabled'])) + ['channels' => Channels::links($settings)];
+        return array_intersect_key($settings, array_flip(['business_name','bot_name','welcome','suggestions','color','position','offset','mobile_offset','width','height','logo','launcher_icon','privacy_notice','poll_seconds','streaming_enabled','ai_enabled'])) + ['channels' => Channels::links($settings)];
     }
     public static function save(array $data): array {
         $settings = self::get();

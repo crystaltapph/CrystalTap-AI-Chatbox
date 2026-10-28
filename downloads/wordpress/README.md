@@ -1,7 +1,7 @@
 # WordPress plugin update
 
-Download [crystaltap-ai-chatbox-0.2.2.zip](crystaltap-ai-chatbox-0.2.2.zip?raw=true) and use WordPress → Plugins → Add New Plugin → Upload Plugin to replace the existing CrystalTap installation. Keep only one plugin copy active. Preserve the database and Firebase settings during the update. Clear your website/page cache afterward so the new customer form loads.
+Download [crystaltap-ai-chatbox-0.2.3.zip](crystaltap-ai-chatbox-0.2.3.zip?raw=true) and use WordPress → Plugins → Add New Plugin → Upload Plugin to replace the existing CrystalTap installation. Keep only one plugin copy active. Preserve the database and Firebase settings during the update, then clear the website/page cache.
 
-This version requires a customer name for new chats, accepts optional email/phone, supports authorized contact display and includes public customer message previews in Android alerts. It retains waiting-queue alerts, idempotent device registration and website worker/queue-delay diagnostics for [Android app 0.1.3](../android/README.md).
+This update adds live assigned-agent status, a larger chat window with maximize controls, a configurable `Welcome, {name}!` greeting, and silent human handoff when AI is disabled. It removes the external-app disclaimer and groups secondary controls under More options. Existing chat, images, customer details and Android notifications remain supported.
 
-Live hosting scheduling must still be verified. Follow the [delivery troubleshooting guide](../../docs/ANDROID.md#intermittent-or-delayed-alerts-plugin-021--app-011).
+Configure the welcome message in **CrystalTap AI → Chat Widget**. The existing Android 0.1.3 APK is compatible with this plugin update. See [widget settings and previews](../../docs/WIDGET.md).

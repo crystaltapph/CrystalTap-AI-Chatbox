@@ -25,6 +25,16 @@ final class Conversations {
     public static function view(array $row): array {
         return array_intersect_key($row, array_flip(['id','status','version','assigned_agent','created_at','updated_at']));
     }
+    /** Public support identity only: never publish a staff email or login/session data. */
+    public static function publicAgent(array $c): ?array {
+        global $wpdb;$id=(int)($c['assigned_agent']??0);
+        if(!$id||!user_can($id,'ctai_agent'))return null;
+        $user=get_userdata($id);$name=trim(sanitize_text_field($user->display_name));
+        if($name===''||is_email($name))$name='Support team';
+        $p=$wpdb->get_row($wpdb->prepare('SELECT availability,heartbeat FROM '.DB::table('agent_profiles').' WHERE user_id=%d',$id),ARRAY_A);
+        $online=$p&&$p['availability']==='online'&&!empty($p['heartbeat'])&&$p['heartbeat']>=gmdate('Y-m-d H:i:s',time()-120);
+        return ['name'=>mb_substr($name,0,80),'online'=>(bool)$online];
+    }
     public static function message(array $conversation, string $sender, string $text, string $key, bool $internal = false, array $metadata = []): array {
         global $wpdb;
         $table = DB::table('messages');

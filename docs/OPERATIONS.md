@@ -1,4 +1,4 @@
-# Operations — plugin 0.2.2 and native Android
+# Operations — plugin 0.2.3 and native Android
 
 For installation, Firebase configuration, Android signing and delivery testing, use [ANDROID.md](ANDROID.md). Old PWA/Web Push/VAPID instructions below are historical and do not apply to 0.2.1. Browser push is retired; keep a backup before upgrading. The existing WordPress browser dashboard remains supported.
 
