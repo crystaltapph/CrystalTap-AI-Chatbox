@@ -119,3 +119,125 @@ test('profile separates push delivery checks and opt-in foreground sound',async(
   await expect(page.locator('#ctai-alert')).toContainText('Enable push on this device first');
   expect(errors).toEqual([]);
 });
+
+test('business contact settings publish safe app links in a phone-sized widget',async({page,browser})=>{
+  await signIn(page);await page.goto('/crystaltap-agent/#business');
+  await expect(page.getByRole('heading',{name:'Business information',exact:true})).toBeVisible();
+  const old=await page.evaluate(async()=>{
+    const b=window.CTAI_APP;const s=await(await fetch(b.api+'admin/settings',{headers:{'X-WP-Nonce':b.nonce}})).json();
+    return Object.fromEntries(['whatsapp_number','messenger_url','viber_number','viber_url'].map(k=>[k,s[k]]));
+  });
+  const visitor=await browser.newContext({viewport:{width:390,height:844}});
+  try {
+    await page.locator('[name=whatsapp_number]').fill('+63 (912) 345-6789');
+    await page.locator('[name=messenger_url]').fill('https://m.me/CrystalTapFixture');
+    await page.locator('[name=viber_number]').fill('+63 912 345 6789');await page.locator('[name=viber_url]').fill('');
+    await page.getByRole('button',{name:'Save settings',exact:true}).click();
+    await expect(page.locator('#ctai-alert')).toHaveText('Settings saved.');
+    const customer=await visitor.newPage();await customer.goto('http://localhost:8080/chat-demo/');
+    const channels=customer.getByRole('navigation',{name:'Other ways to contact us'});
+    await expect(channels).toBeVisible();
+    await expect(channels.getByRole('link',{name:'Contact us on WhatsApp',exact:true})).toHaveAttribute('href','https://wa.me/639123456789');
+    await expect(channels.getByRole('link',{name:'Contact us on Messenger',exact:true})).toHaveAttribute('href','https://m.me/CrystalTapFixture');
+    await expect(channels.getByRole('link',{name:'Contact us on Viber',exact:true})).toHaveAttribute('href','viber://chat?number=%2B639123456789');
+    await expect(channels.getByRole('link',{name:'Contact us on WhatsApp',exact:true})).toHaveAttribute('rel','noopener noreferrer');
+    await expect(channels).toContainText('Replies stay in that app');
+    expect(await customer.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    for(const width of [390,320]) {
+      await customer.setViewportSize({width,height:844});
+      const bounds=await customer.evaluate(()=>{const panel=document.querySelector('.ctai-panel').getBoundingClientRect(),form=document.querySelector('.ctai-composer').getBoundingClientRect();return {panelBottom:panel.bottom,formBottom:form.bottom,formHeight:form.height};});
+      expect(bounds.formBottom).toBeLessThanOrEqual(bounds.panelBottom+1);expect(bounds.formHeight).toBeGreaterThan(40);
+    }
+
+    await customer.getByRole('textbox',{name:'Message',exact:true}).fill('Contact buttons regression: website chat still works');
+    await customer.getByRole('button',{name:'Send',exact:true}).click();
+    await expect(customer.locator('.ctai-customer')).toContainText('Contact buttons regression: website chat still works');
+  } finally {
+    await visitor.close();
+    await page.evaluate(async data=>{const b=window.CTAI_APP;const r=await fetch(b.api+'admin/settings',{method:'PUT',headers:{'Content-Type':'application/json','X-WP-Nonce':b.nonce},body:JSON.stringify(data)});if(!r.ok)throw new Error('Could not restore local contact fixture');},old);
+  }
+});
+
+test('delayed agent requests cannot overwrite a newly opened conversation',async({page})=>{
+  await signIn(page);
+  let release,started;
+  const pending=new Promise(resolve=>{started=resolve;});
+  await page.route('**/crystaltap-ai/v1/agent/conversations/8100*',async r=>{
+    const id=Number(new URL(r.request().url()).pathname.split('/').at(-1));
+    if(id===81001){started();await new Promise(resolve=>{release=resolve;});}
+    await r.fulfill({json:{conversation:{id,status:'waiting',assigned_agent:null,version:1},messages:[],customer:null}});
+  });
+  await page.goto('/crystaltap-agent/#conversation/81001');await pending;
+  await page.evaluate(()=>{location.hash='conversation/81002';});
+  await expect(page.getByRole('heading',{name:'Conversation #81002',exact:true})).toBeVisible();
+  const complete=page.waitForResponse(r=>r.url().endsWith('/agent/conversations/81001'));
+  release();await complete;
+  // Await a fresh page turn after the delayed fetch has delivered its body.
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await expect(page.getByRole('heading',{name:'Conversation #81002',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Conversation #81001',exact:true})).toHaveCount(0);
+});
+
+test('typing a new draft during a slow agent send preserves the draft',async({page})=>{
+  await signIn(page);
+  await page.route('**/crystaltap-ai/v1/agent/conversations/82001**',async r=>{
+    if(r.request().url().endsWith('/messages'))return;
+    await r.fulfill({json:{conversation:{id:82001,status:'human_active',assigned_agent:1,version:2},messages:[],customer:null}});
+  });
+  let release,started;const pending=new Promise(resolve=>{started=resolve;});
+  await page.route('**/crystaltap-ai/v1/agent/conversations/82001/messages',async r=>{started();await new Promise(resolve=>{release=resolve;});await r.fulfill({json:{id:1,seq:1}});});
+  await page.goto('/crystaltap-agent/#conversation/82001');
+  const reply=page.getByRole('textbox',{name:'Agent reply'});await reply.fill('First reply');
+  await page.getByRole('button',{name:'Send message',exact:true}).click();await pending;
+  await reply.fill('Next unsent draft');release();
+  await expect(page.locator('#ctai-send-status')).toHaveText('Message saved on the server.');
+  await expect(reply).toHaveValue('Next unsent draft');
+});
+
+test('expired visitor session can start a new chat without reloading the page',async({page})=>{
+  await page.goto('/chat-demo/');
+  const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Session recovery fixture');
+  await page.getByRole('button',{name:'Send',exact:true}).click();await expect(page.locator('.ctai-customer')).toBeVisible();
+  await page.context().clearCookies();
+  await input.fill('Retain my unsent draft');await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.ctai-error')).toContainText('Select New chat to continue');
+  await expect(input).toHaveValue('Retain my unsent draft');
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'New chat',exact:true}).click();
+  await expect(input).toBeEnabled();await expect(input).toHaveValue('');
+  await expect(page.locator('.ctai-customer')).toHaveCount(0);
+  await input.fill('Fresh session works');await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.ctai-customer')).toHaveText(/Fresh session works/);
+});
+
+test('an already-waiting app update stays visible while using the workspace',async({page})=>{
+  await page.addInitScript(()=>{
+    const worker={postMessage(){}};
+    Object.defineProperty(navigator,'serviceWorker',{configurable:true,value:{controller:{},register:async()=>({waiting:worker,installing:null,addEventListener(){}}),addEventListener(){}}});
+  });
+  await signIn(page);await page.goto('/crystaltap-agent/#profile');
+  await expect(page.getByRole('heading',{name:'Your workspace'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Apply update',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Mute in-app sound',exact:true}).click();
+  await expect(page.locator('#ctai-alert')).toHaveText('In-app sound muted.');
+  await expect(page.getByRole('button',{name:'Apply update',exact:true})).toBeVisible();
+});
+
+test('a delayed visitor history response cannot replace a new chat',async({page})=>{
+  await page.goto('/chat-demo/');
+  const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Old conversation marker');
+  await page.getByRole('button',{name:'Send',exact:true}).click();await expect(page.locator('.ctai-customer')).toContainText('Old conversation marker');
+  let release,started;const pending=new Promise(resolve=>{started=resolve;});
+  await page.route('**/crystaltap-ai/v1/public/conversations/*/messages?after=*',async r=>{
+    const response=await r.fetch();started();await new Promise(resolve=>{release=resolve;});await r.fulfill({response});
+  },{times:1});
+  // Visibility restoration triggers the same history refresh used by the polling timer.
+  await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await pending;
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'New chat',exact:true}).click();
+  await expect(page.locator('.ctai-customer')).toHaveCount(0);
+  const complete=page.waitForResponse(r=>r.url().includes('/messages?after='));release();await complete;
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await input.fill('New conversation marker');await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.locator('.ctai-customer')).toHaveCount(1);
+  await expect(page.locator('.ctai-customer')).toContainText('New conversation marker');
+  await expect(page.locator('.ctai-messages')).not.toContainText('Old conversation marker');
+});

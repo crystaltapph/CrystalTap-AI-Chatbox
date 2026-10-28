@@ -59,6 +59,28 @@ try {
     Notifications::emit($users['agent'],'new-after-boundary',$id,'message','New alert');Notifications::read($users['agent'],$through,true);
     check(Notifications::listing($users['agent'])['unread']===1,'mark all read preserves newly arriving notifications');
     check(Notifications::listing($users['other'])['unread']===0,'notification recipient isolation');
+    // Contact destinations are public links, never provider credentials or forwarded messages.
+    $contacts=Settings::save(['whatsapp_number'=>'+63 (912) 345-6789','messenger_url'=>'https://m.me/CrystalTapFixture','viber_number'=>'+63 912 345 6789','viber_url'=>'']);
+    $links=Settings::publicConfig()['channels'];
+    check(count($links)===3&&$links[0]['url']==='https://wa.me/639123456789'&&$links[2]['url']==='viber://chat?number=%2B639123456789','configured contacts publish canonical WhatsApp, Messenger and Viber links');
+    check(!isset(Settings::publicConfig()['openai_key'])&&!isset(Settings::publicConfig()['vapid_private']),'public contact configuration excludes private credentials');
+    Settings::save(['whatsapp_number'=>'639123456780']);Settings::save(['whatsapp_number'=>'639123456789']);
+    check(Settings::get()['whatsapp_number']==='639123456789','numeric contact values retain string type across repeated saves');
+    denied(fn()=>Settings::save(['whatsapp_number'=>'09123456789']),400,'local phone number without country code is rejected');
+    denied(fn()=>Settings::save(['messenger_url'=>'https://m.me.attacker.invalid/Page']),400,'lookalike Messenger domain rejected');
+    denied(fn()=>Settings::save(['messenger_url'=>'https://m.me@attacker.invalid/Page']),400,'Messenger URL userinfo attack rejected');
+    denied(fn()=>Settings::save(['viber_url'=>'javascript:alert(1)']),400,'executable Viber URL rejected');
+    denied(fn()=>Settings::save(['viber_url'=>'https://vb.me.attacker.invalid/chat']),400,'lookalike Viber share domain rejected');
+    denied(fn()=>Settings::save(['viber_url'=>'viber://chat?number[]=12345678']),400,'Viber query arrays rejected');
+    check(Settings::get()['whatsapp_number']==='639123456789'&&Settings::get()['viber_url']==='','invalid contact save leaves existing settings intact');
+    Settings::save(['viber_url'=>'viber://pa?chatURI=crystaltap_fixture']);
+    check(Settings::publicConfig()['channels'][2]['url']==='viber://pa?chatURI=crystaltap_fixture','Viber bot link overrides the optional phone link');
+    Settings::save(['viber_url'=>'https://invite.viber.com/?g2=public-fixture']);
+    check(Settings::publicConfig()['channels'][2]['url']==='https://invite.viber.com/?g2=public-fixture','official Viber share links are supported');
+    check(CrystalTap\Channels::viber('https://VB.ME/public-fixture')==='https://vb.me/public-fixture','Viber host casing is normalized for consistent browser rendering');
+    check(CrystalTap\Channels::links(['messenger_url'=>'javascript:alert(1)'])===[],'unsafe legacy contact settings remain hidden on read');
+    Settings::save(['whatsapp_number'=>'','messenger_url'=>'','viber_number'=>'','viber_url'=>'']);
+    check(Settings::publicConfig()['channels']===[],'blank contact settings hide all external buttons');
     denied(fn()=>Push::validate(['endpoint'=>'https://127.0.0.1/private','keys'=>[]]),400,'push SSRF endpoint rejected');
     denied(fn()=>Push::validate(['endpoint'=>'https://fcm.googleapis.com@127.0.0.1/private','keys'=>[]]),400,'push endpoint userinfo attack rejected');
     check(Push::decrypt(Push::encrypt('subscription-secret'))==='subscription-secret','authenticated subscription encryption round trip');
@@ -186,6 +208,10 @@ try {
     AI::settle(AI::periods(),0.01,0);Settings::save(['daily_budget'=>5]);
     $c=Conversations::get($id); wp_set_current_user($users['agent']); Conversations::action($id,'resolve',(int)$c['version']);
     denied(fn()=>Conversations::agentMessage($id,'Cannot send','resolvedtest1234',false),409,'resolved conversations reject agent replies');
+    $reopened=Conversations::action($id,'reopen',(int)Conversations::get($id)['version']);
+    check($reopened['status']==='waiting'&&empty($reopened['assigned_agent']),'reopened conversation returns to the unassigned queue');
+    check((int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.DB::table('notifications')." WHERE event_key=%s AND user_id=%d",'reopen-'.$id.'-'.$reopened['version'],$users['supervisor']))===1,'reopening immediately alerts the support queue');
+
     // Nested rollback must not commit a parent transaction during handoff.
     $nested=(int)Conversations::start($session)['id'];
     try { DB::transaction(function()use($nested){Conversations::handoff($nested);throw new RuntimeException('rollback probe');}); } catch(RuntimeException $e){}

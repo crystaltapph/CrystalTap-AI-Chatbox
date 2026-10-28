@@ -9,11 +9,11 @@
   const mobile = root.classList.contains('ctai-mobile');
   let route = '', selected = null, lastSeq = 0, sending = false, page = 1, filter = 'all', bellItems = [], notificationBefore = 0, installPrompt = null;
   const state = { content: [], settings: null, agents: [] };
-  let audio = null, soundEnabled = false, bellThrough = null;
+  let audio = null, soundEnabled = false, bellThrough = null, navigationId = 0, conversationRefresh = 0;
   const tabs = [['home','Overview','◉'],['inbox','Inbox','▤'],['notifications','Notifications','🔔'],['leads','Leads','◇'],['profile','Profile','○']];
   const more = boot.user.manage ? [['products','Products'],['knowledge','Knowledge base'],['ai','AI configuration'],['widget','Chat widget'],['business','Business information'],['settings','Settings'],['logs','Logs']] : [];
   if (boot.user.supervise) more.unshift(['agents','Live agents'], ['analytics','Analytics']);
-  root.innerHTML = `<header class="ctai-top"><a class="ctai-brand" href="#home"><span class="ctai-brand-icon">C</span><span>CrystalTap <small>Agent workspace</small></span></a><div class="ctai-top-actions"><span id="ctai-connection">Connected</span><a href="#notifications" class="ctai-bell" aria-label="Notifications"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M9 21h6"/></svg> <span id="ctai-badge">0</span></a><a class="ctai-avatar" href="#profile" aria-label="Your profile">${esc(boot.user.name.slice(0,1).toUpperCase())}</a></div></header><div class="ctai-layout"><nav class="ctai-nav" aria-label="Main navigation">${tabs.map(([id,name,icon]) => `<a href="#${id}" data-nav="${id}"><span>${icon}</span>${name}</a>`).join('')}${!mobile ? `<div class="ctai-nav-label">MANAGE</div>${more.map(([id,name]) => `<a href="#${id}" data-nav="${id}">${name}</a>`).join('')}<a href="${esc(boot.app)}" target="_blank" rel="noopener">Open mobile app ↗</a>` : ''}</nav><main class="ctai-main"><div id="ctai-alert" role="status" hidden></div><div id="ctai-view"></div></main></div>`;
+  root.innerHTML = `<header class="ctai-top"><a class="ctai-brand" href="#home"><span class="ctai-brand-icon">C</span><span>CrystalTap <small>Agent workspace</small></span></a><div class="ctai-top-actions"><span id="ctai-connection">Connected</span><a href="#notifications" class="ctai-bell" aria-label="Notifications"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M9 21h6"/></svg> <span id="ctai-badge">0</span></a><a class="ctai-avatar" href="#profile" aria-label="Your profile">${esc(boot.user.name.slice(0,1).toUpperCase())}</a></div></header><div class="ctai-layout"><nav class="ctai-nav" aria-label="Main navigation">${tabs.map(([id,name,icon]) => `<a href="#${id}" data-nav="${id}"><span>${icon}</span>${name}</a>`).join('')}${!mobile ? `<div class="ctai-nav-label">MANAGE</div>${more.map(([id,name]) => `<a href="#${id}" data-nav="${id}">${name}</a>`).join('')}<a href="${esc(boot.app)}" target="_blank" rel="noopener">Open mobile app ↗</a>` : ''}</nav><main class="ctai-main"><div id="ctai-update" class="ctai-alert" role="status" hidden></div><div id="ctai-alert" role="status" hidden></div><div id="ctai-view"></div></main></div>`;
   const view = root.querySelector('#ctai-view'), alert = root.querySelector('#ctai-alert');
   function message(text, error = true) { alert.textContent = text; alert.hidden = !text; alert.className = error ? 'ctai-alert ctai-danger' : 'ctai-alert'; }
   async function api(path, method = 'GET', body, retry = true) {
@@ -29,7 +29,7 @@
     }
     return result;
   }
-  async function run(fn) { try { message(''); return await fn(); } catch(e) { message(e.message); } }
+  async function run(fn) { const visit=navigationId; try { message(''); return await fn(); } catch(e) { if(visit===navigationId)message(e.message); } }
   function title(name, subtitle = '') { return `<div class="ctai-page-heading"><div><p class="ctai-eyebrow">CRYSTALTAP AI</p><h1>${esc(name)}</h1>${subtitle ? `<p>${esc(subtitle)}</p>` : ''}</div></div>`; }
   function empty(text) { return `<div class="ctai-empty"><span>◇</span><h3>${esc(text)}</h3><p>Updates will appear here when there is activity.</p></div>`; }
   function field(name, text, value = '', type = 'text', required = false) {
@@ -79,8 +79,9 @@
     message(result.message,false);
   }
   async function home() {
+    const visit=navigationId;
     const [items, availability, notifications] = await Promise.all([api('agent/conversations?filter=active'), api('agent/availability'), api('agent/notifications')]);
-    if(route!=='home')return;
+    if(visit!==navigationId||route!=='home')return;
     view.innerHTML = title(`Hello, ${boot.user.name.split(' ')[0]}`, 'A clear view of the conversations that need you.') + `<section class="ctai-welcome"><div><span class="ctai-pill">YOUR AVAILABILITY</span><h2>Ready to help, one conversation at a time.</h2><p>Set your status so the team knows when you can take new requests.</p></div><select id="ctai-availability" aria-label="Your availability">${['online','away','offline'].map(s => `<option value="${s}" ${availability.availability === s ? 'selected' : ''}>${label(s)}</option>`).join('')}</select></section><div class="ctai-stats">${[['Assigned to you',items.filter(c => +c.assigned_agent === +boot.user.id).length],['Waiting for an agent',items.filter(c => c.status === 'waiting').length],['Unread notifications',notifications.unread]].map(([name,n]) => `<div class="ctai-stat"><span>${name}</span><strong>${n}</strong><small>${name.includes('notification') ? 'Across your devices' : 'In the current inbox page'}</small></div>`).join('')}</div><section class="ctai-section"><div class="ctai-section-heading"><h2>Recent conversations</h2><a href="#inbox">View inbox →</a></div>${conversationList(items.slice(0,6))}</section>`;
     view.querySelector('#ctai-availability').onchange = e => run(() => api('agent/availability','PUT',{status:e.target.value}));
     bindConversationLinks();
@@ -99,16 +100,18 @@
     }));
   }
   async function inbox() {
+    const visit=navigationId;
     const search = new URLSearchParams(location.hash.split('?')[1] || '').get('search') || '';
     const items = await api(`agent/conversations?filter=${encodeURIComponent(filter)}&page=${page}&search=${encodeURIComponent(search)}`);
-    if(!route.startsWith('inbox'))return;
+    if(visit!==navigationId||!route.startsWith('inbox'))return;
     view.innerHTML = title('Conversation inbox','AI assistance and your support team, working together.') + `<div class="ctai-toolbar"><select id="ctai-filter" aria-label="Conversation filter">${[['all','All conversations'],['waiting','Waiting for agent'],['mine','Assigned to me'],['active','Active'],['resolved','Resolved']].map(([id,name]) => `<option value="${id}" ${filter === id ? 'selected' : ''}>${name}</option>`).join('')}</select><form id="ctai-search"><input name="search" aria-label="Search conversations" placeholder="Search name, message or #" value="${esc(search)}"><button>Search</button></form></div>${conversationList(items)}${pagination(items.length === 40)}`;
     view.querySelector('#ctai-filter').onchange = e => { filter = e.target.value; page = 1; run(inbox); };
     view.querySelector('#ctai-search').onsubmit = e => { e.preventDefault(); page = 1; location.hash = 'inbox?search=' + encodeURIComponent(new FormData(e.target).get('search')); };
     bindConversationLinks(); bindPages(inbox);
   }
   async function conversation(id) {
-    const data = await api(`agent/conversations/${id}`); selected = data.conversation; lastSeq = 0;
+    const visit=navigationId;
+    const data = await api(`agent/conversations/${id}`); if(visit!==navigationId)return; selected = data.conversation; lastSeq = 0;
     view.innerHTML = `<div class="ctai-chat-heading"><a href="#inbox" class="ctai-back">← Inbox</a><h1>Conversation #${id}</h1><span id="ctai-chat-status" class="ctai-state">${esc(label(selected.status))}</span></div><div id="ctai-actions" class="ctai-toolbar"></div><section class="ctai-chat"><div id="ctai-history" class="ctai-history" role="log" aria-label="Conversation history" aria-live="polite"></div><form id="ctai-reply" class="ctai-reply"><label class="ctai-note-toggle"><input type="checkbox" name="internal"> Private note (team only)</label><textarea name="content" rows="3" maxlength="4000" placeholder="Write your response…" aria-label="Agent reply" required></textarea><div><span id="ctai-send-status">Messages are sent only while connected.</span><button class="ctai-primary" type="submit">Send message</button></div></form></section><div class="ctai-toolbar" id="ctai-privacy-actions"></div>`;
     appendMessages(data.messages); renderActions();
     if (data.customer) {
@@ -118,11 +121,11 @@
     }
     let pending = null;
     view.querySelector('#ctai-reply').onsubmit = e => { e.preventDefault(); if (sending) return;
-      const f = e.target, content = f.elements.content.value.trim(), internal = f.elements.internal.checked;
+      const f = e.target, draft = f.elements.content.value, content = draft.trim(), internal = f.elements.internal.checked;
       if (!content) return;
       if (!pending || pending.content !== content || pending.internal !== internal) pending = {key:crypto.randomUUID(),content,internal};
       sending = true; const b = f.querySelector('button'); b.disabled = true; view.querySelector('#ctai-send-status').textContent = 'Sending…';
-      run(async () => { await api(`agent/conversations/${id}/messages`,'POST',pending); f.elements.content.value = ''; pending = null; await updateConversation(); }).finally(() => { sending = false; b.disabled = !navigator.onLine; const s = view.querySelector('#ctai-send-status'); if(s) s.textContent = pending ? 'Not confirmed. Retry to check delivery safely.' : 'Message saved on the server.'; });
+      run(async () => { await api(`agent/conversations/${id}/messages`,'POST',pending); if(f.elements.content.value===draft)f.elements.content.value = ''; pending = null; if(visit===navigationId)await updateConversation(); }).finally(() => { sending = false; b.disabled = !navigator.onLine; const s = f.querySelector('#ctai-send-status'); if(s) s.textContent = pending ? 'Not confirmed. Retry to check delivery safely.' : 'Message saved on the server.'; });
     };
     if (boot.user.manage) {
       const p = view.querySelector('#ctai-privacy-actions');
@@ -153,20 +156,26 @@
     if (c.status === 'closed') actions.push(['reopen','Reopen']);
     toolbar.innerHTML = actions.map(([id,name])=>`<button data-action="${id}" class="${id==='claim'?'ctai-primary':''}">${name}</button>`).join('');
     toolbar.querySelectorAll('[data-action]').forEach(b => b.onclick = () => run(async () => {
-      const action=b.dataset.action; let agent=0;
-      if(action==='transfer') { const users=await api('admin/agents'); const pick=prompt('Enter agent ID:\n'+users.map(u=>`${u.id}: ${u.name} (${u.availability})`).join('\n')); if(!pick)return; agent=+pick; }
-      selected=await api(`agent/conversations/${c.id}/actions/${action}`,'POST',{version:+c.version,agent}); renderActions(); view.querySelector('#ctai-chat-status').textContent=label(selected.status);
+      const action=b.dataset.action, visit=navigationId; let agent=0;
+      if(action==='transfer') { const users=await api('admin/agents'); if(visit!==navigationId)return; const pick=prompt('Enter agent ID:\n'+users.map(u=>`${u.id}: ${u.name} (${u.availability})`).join('\n')); if(!pick)return; agent=+pick; }
+      const updated=await api(`agent/conversations/${c.id}/actions/${action}`,'POST',{version:+c.version,agent}); if(visit!==navigationId||+selected?.id!==+c.id)return; conversationRefresh++; selected=updated; renderActions(); view.querySelector('#ctai-chat-status').textContent=label(selected.status);
     }));
   }
   async function markConversationRead() { if (selected && lastSeq && !document.hidden) await api(`agent/conversations/${selected.id}/read`,'PUT',{seq:lastSeq}); }
   async function updateConversation() {
     if (!selected || !route.startsWith('conversation/')) return;
+    const id=selected.id, visit=navigationId, refresh=++conversationRefresh;
     let data;
-    do { data=await api(`agent/conversations/${selected.id}?after=${lastSeq}`); selected=data.conversation; appendMessages(data.messages); } while(data.messages.length===100);
+    do {
+      data=await api(`agent/conversations/${id}?after=${lastSeq}`);
+      if(visit!==navigationId||+selected?.id!==+id||refresh!==conversationRefresh)return;
+      selected=data.conversation; appendMessages(data.messages);
+    } while(data.messages.length===100);
     const s=view.querySelector('#ctai-chat-status'); if(s)s.textContent=label(selected.status); renderActions(); await markConversationRead();
   }
   async function notifications() {
-    const data=await api(`agent/notifications${notificationBefore?'?before='+notificationBefore:''}`); if(!route.startsWith('notifications'))return; bellItems=data.items;
+    const visit=navigationId;
+    const data=await api(`agent/notifications${notificationBefore?'?before='+notificationBefore:''}`); if(visit!==navigationId||!route.startsWith('notifications'))return; bellItems=data.items;
     view.innerHTML=title('Notifications','Your support updates, synchronized across devices.')+`<div class="ctai-toolbar"><button id="ctai-read-all">Mark displayed and earlier as read</button></div>`+(data.items.length?`<div class="ctai-notifications">${data.items.map(n=>`<article class="ctai-notification ${n.read_at?'':'ctai-unread'}"><span class="ctai-notification-dot"></span><div><strong>${esc(n.title)}</strong><p>${esc(label(n.type))} · ${esc(time(n.created_at))}</p>${n.preview?`<p>${esc(n.preview)}</p>`:''}<a href="#conversation/${n.conversation_id}">Open conversation #${n.conversation_id} →</a></div><button data-notification="${n.id}" ${n.read_at?'disabled':''}>${n.read_at?'Read':'Mark read'}</button></article>`).join('')}</div>`:empty('No notifications yet'))+`<div class="ctai-pagination"><button id="ctai-notification-newest">Newest</button><button id="ctai-notification-older" ${data.items.length===40?'':'disabled'}>Older</button></div>`;
     view.querySelector('#ctai-read-all').onclick=()=>run(async()=>{ if(data.items.length)await api('agent/notifications/read-all','POST',{through:+data.items[0].id}); await notifications(); await bell(); });
     view.querySelectorAll('[data-notification]').forEach(b=>b.onclick=()=>run(async()=>{ await api(`agent/notifications/${b.dataset.notification}/read`,'PUT',{}); await notifications(); await bell(); }));
@@ -174,7 +183,8 @@
     view.querySelector('#ctai-notification-older').onclick=()=>{notificationBefore=+data.items.at(-1).id;run(notifications);};
   }
   async function content(type) {
-    state.content=await api(`admin/content/${type}?page=${page}`);
+    const visit=navigationId;
+    const items=await api(`admin/content/${type}?page=${page}`); if(visit!==navigationId)return; state.content=items;
     view.innerHTML=title(type==='products'?'Product catalog':'Knowledge base','Only enabled, administrator-approved information is used by AI.')+`<div class="ctai-toolbar"><button id="ctai-add-content" class="ctai-primary">Add ${type==='products'?'product':'knowledge entry'}</button></div><div id="ctai-content-editor"></div>`+table(state.content,[['title','Title'],['category','Category'],['enabled','Published',v=>+v?'Approved & enabled':'Draft'],['updated_at','Updated',v=>esc(time(v))],['id','Actions',v=>`<button data-edit="${v}">Edit</button> <button data-delete="${v}" class="ctai-text-danger">Delete</button>`]])+pagination(state.content.length===50);
     view.querySelector('#ctai-add-content').onclick=()=>editContent(type,{});
     view.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editContent(type,state.content.find(r=>r.id===b.dataset.edit)));
@@ -196,12 +206,13 @@
   const settingsGroups={
     ai:['ai_enabled','streaming_enabled','summarization_enabled','model','reasoning','max_output_tokens','context_messages','timeout','retry_limit','daily_budget','monthly_budget','input_price','output_price','instructions'],
     widget:['widget_enabled','bot_name','welcome','suggestions','color','logo','position','offset','mobile_offset','width','height','disabled_pages','auto_greeting'],
-    business:['business_name','contact','support_hours'],
+    business:['business_name','contact','support_hours','whatsapp_number','messenger_url','viber_number','viber_url'],
     settings:['session_hours','retention_days','session_limit','poll_seconds','followup_minutes','privacy_notice','vapid_public','vapid_subject']
   };
   async function settings(group) {
-    const [s,health]=await Promise.all([api('admin/settings'),api('admin/health')]); state.settings=s;
-    view.innerHTML=title({ai:'AI configuration',widget:'Chat widget',business:'Business information',settings:'Platform settings'}[group],group==='ai'?'Usage costs are local estimates, not official OpenAI billing.':'Configure your standalone support platform.')+`<form class="ctai-card ctai-form" id="ctai-settings-form">${settingsGroups[group].map(k=>field(k,({input_price:'Input price — USD per million tokens (verify current model pricing)',output_price:'Output price — USD per million tokens (verify current model pricing)',session_hours:'Visitor session lifetime — hours',retention_days:'Conversation retention — days',suggestions:'Suggested questions — one per line',disabled_pages:'Disabled WordPress page IDs — one per line',followup_minutes:'Unanswered handoff alert — minutes',vapid_subject:'VAPID contact (mailto: or HTTPS URL)'})[k]||label(k),Array.isArray(s[k])?s[k].join('\n'):s[k],typeof s[k]==='boolean'?'checkbox':typeof s[k]==='number'?'number':(['instructions','welcome','suggestions','disabled_pages','contact','support_hours','privacy_notice'].includes(k)?'textarea':k==='color'?'color':'text'))).join('')}<button class="ctai-primary">Save settings</button></form>${group==='ai'?'<div class="ctai-card"><h2>AI connection</h2><p>The API key must be configured on the server as <code>CTAI_OPENAI_KEY</code>. It is never returned to this app.</p><button id="ctai-ai-test">Test connection</button><p>Connection tests consume a small amount of your configured budget.</p></div>':''}${group==='settings'?'<div class="ctai-card"><h2>Operational requirements</h2><p>Use HTTPS, exclude private REST responses from caching, and run WordPress cron every minute for timely background alerts. Store the private VAPID key as <code>CTAI_VAPID_PRIVATE</code> on the server.</p><p>Deactivation preserves customer records. See the deployment guide before upgrades or uninstalling.</p></div>':''}<div class="ctai-card"><h2>Environment health</h2>${table(Object.entries(health).map(([name,value])=>({name,value:typeof value==='boolean'?(value?'Configured':'Not configured'):value})),[['name','Check'],['value','Status']])}</div>`;
+    const visit=navigationId;
+    const [s,health]=await Promise.all([api('admin/settings'),api('admin/health')]); if(visit!==navigationId)return; state.settings=s;
+    view.innerHTML=title({ai:'AI configuration',widget:'Chat widget',business:'Business information',settings:'Platform settings'}[group],group==='ai'?'Usage costs are local estimates, not official OpenAI billing.':'Configure your standalone support platform.')+`${group==='business'?'<section class="ctai-card"><h2>Messaging apps</h2><p>Enter your public business contacts below. Configured buttons appear in the customer chatbox. Leave a field blank to hide it. Customers continue in the selected app; those messages are handled there.</p></section>':''}<form class="ctai-card ctai-form" id="ctai-settings-form">${settingsGroups[group].map(k=>field(k,({input_price:'Input price — USD per million tokens (verify current model pricing)',output_price:'Output price — USD per million tokens (verify current model pricing)',session_hours:'Visitor session lifetime — hours',retention_days:'Conversation retention — days',suggestions:'Suggested questions — one per line',disabled_pages:'Disabled WordPress page IDs — one per line',followup_minutes:'Unanswered handoff alert — minutes',vapid_subject:'VAPID contact (mailto: or HTTPS URL)',whatsapp_number:'WhatsApp number — country code and number, e.g. +63…',messenger_url:'Messenger link — https://m.me/YourPage',viber_number:'Viber number — country code and number, e.g. +63…',viber_url:'Viber share or bot link — optional, overrides Viber number'})[k]||label(k),Array.isArray(s[k])?s[k].join('\n'):s[k],typeof s[k]==='boolean'?'checkbox':typeof s[k]==='number'?'number':(['instructions','welcome','suggestions','disabled_pages','contact','support_hours','privacy_notice'].includes(k)?'textarea':k==='color'?'color':'text'))).join('')}<button class="ctai-primary">Save settings</button></form>${group==='ai'?'<div class="ctai-card"><h2>AI connection</h2><p>The API key must be configured on the server as <code>CTAI_OPENAI_KEY</code>. It is never returned to this app.</p><button id="ctai-ai-test">Test connection</button><p>Connection tests consume a small amount of your configured budget.</p></div>':''}${group==='settings'?'<div class="ctai-card"><h2>Operational requirements</h2><p>Use HTTPS, exclude private REST responses from caching, and run WordPress cron every minute for timely background alerts. Store the private VAPID key as <code>CTAI_VAPID_PRIVATE</code> on the server.</p><p>Deactivation preserves customer records. See the deployment guide before upgrades or uninstalling.</p></div>':''}<div class="ctai-card"><h2>Environment health</h2>${table(Object.entries(health).map(([name,value])=>({name,value:typeof value==='boolean'?(value?'Configured':'Not configured'):value})),[['name','Check'],['value','Status']])}</div>`;
     view.querySelector('#ctai-settings-form').onsubmit=e=>{e.preventDefault();run(async()=>{const data=Object.fromEntries(new FormData(e.target));for(const k of settingsGroups[group]){if(typeof s[k]==='boolean')data[k]=e.target.elements[k].checked;else if(typeof s[k]==='number')data[k]=+data[k];else if(Array.isArray(s[k]))data[k]=data[k].split('\n').map(v=>v.trim()).filter(Boolean);}await api('admin/settings','PUT',data);message('Settings saved.',false);});};
     if(group==='ai') {
       const card=document.createElement('section');card.className='ctai-card';
@@ -215,7 +226,8 @@
     const test=view.querySelector('#ctai-ai-test');if(test)test.onclick=()=>run(async()=>{test.disabled=true;try{await api('admin/ai-test','POST',{});message('OpenAI connection succeeded.',false);}finally{test.disabled=false;}});
   }
   async function leads() {
-    const items=await api(`agent/leads?page=${page}`);
+    const visit=navigationId;
+    const items=await api(`agent/leads?page=${page}`); if(visit!==navigationId)return;
     view.innerHTML=title('Customer leads','Contact details shared voluntarily for customer inquiries.')+table(items,[['name','Customer'],['phone','Phone'],['email','Email'],['interest','Interest'],['status','Status',v=>esc(label(v))],['assigned_agent','Agent'],['id','Actions',(v,r)=>`<button data-lead="${v}">Update</button> <a href="#conversation/${r.conversation_id}">Chat</a>`]])+pagination(items.length===40);
     view.querySelectorAll('[data-lead]').forEach(b=>b.onclick=()=>{
       const item=items.find(r=>r.id===b.dataset.lead),old=view.querySelector('#ctai-lead-editor');if(old)old.remove();
@@ -229,7 +241,8 @@
     bindPages(leads);
   }
   async function profile() {
-    const [prefs,devices,pushConfig,pushStatus]=await Promise.all([api('agent/preferences'),api('agent/devices'),api('agent/push-config'),api('agent/push-status')]); state.pushConfig=pushConfig;
+    const visit=navigationId;
+    const [prefs,devices,pushConfig,pushStatus]=await Promise.all([api('agent/preferences'),api('agent/devices'),api('agent/push-config'),api('agent/push-status')]); if(visit!==navigationId)return; state.pushConfig=pushConfig;
     const permission = 'Notification' in window ? Notification.permission : 'Unsupported';
     const age = pushStatus.worker_last_run_seconds_ago;
     const checks = [
@@ -264,17 +277,19 @@
     if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});
     await api('agent/devices','POST',subscription.toJSON());message('This device is registered for eligible support alerts.',false);
   }
-  async function agents() { const items=await api('admin/agents');view.innerHTML=title('Live agents','Availability requires an explicit status and a recent heartbeat.')+table(items,[['id','Agent ID'],['name','Name'],['availability','Availability'],['heartbeat','Last seen',v=>esc(time(v))]])+'<div class="ctai-card"><p>Create WordPress users with the CrystalTap Support Agent or Supervisor role in the WordPress Users screen. Agents do not need WordPress administrator access.</p></div>'; }
+  async function agents() { const visit=navigationId; const items=await api('admin/agents'); if(visit!==navigationId)return;view.innerHTML=title('Live agents','Availability requires an explicit status and a recent heartbeat.')+table(items,[['id','Agent ID'],['name','Name'],['availability','Availability'],['heartbeat','Last seen',v=>esc(time(v))]])+'<div class="ctai-card"><p>Create WordPress users with the CrystalTap Support Agent or Supervisor role in the WordPress Users screen. Agents do not need WordPress administrator access.</p></div>'; }
   async function analytics() {
+    const visit=navigationId;
     const from=view.querySelector('[name=from]')?.value||'',to=view.querySelector('[name=to]')?.value||'';
-    const d=await api(`admin/analytics?from=${from}&to=${to}`);
+    const d=await api(`admin/analytics?from=${from}&to=${to}`); if(visit!==navigationId)return;
     view.innerHTML=title('Analytics','Date-filtered conversations and locally estimated AI usage.')+`<form id="ctai-date-filter" class="ctai-toolbar">${field('from','From',from,'date')}${field('to','To',to,'date')}<button>Apply dates</button></form><div class="ctai-stats">${[['Conversations',d.conversations],['Conversations today',d.today],['Leads',d.leads],['AI requests',d.usage.requests],['Estimated USD',d.usage.estimated_usd],['AI failures / uncertain',d.usage.failures||0]].map(([n,v])=>`<div class="ctai-stat"><span>${n}</span><strong>${esc(v)}</strong></div>`).join('')}</div><div class="ctai-card"><h2>Current conversation states (all time)</h2>${table(d.states,[['status','State',v=>esc(label(v))],['count','Count']])}</div><p>Token usage: ${esc(d.usage.input_tokens)} input · ${esc(d.usage.output_tokens)} output. Estimates can differ from provider billing.</p>`;
     view.querySelector('#ctai-date-filter').onsubmit=e=>{e.preventDefault();run(analytics);};
   }
-  async function logs(){const d=await api('admin/logs');view.innerHTML=title('Operational logs','Redacted audit and AI usage records. Customer message bodies are excluded.')+`<div class="ctai-card"><h2>Audit</h2>${table(d.audit,[['created_at','Time',v=>esc(time(v))],['user_id','Actor'],['action','Action'],['target_id','Target'],['outcome','Outcome']])}</div><div class="ctai-card"><h2>AI usage</h2>${table(d.usage,[['created_at','Time',v=>esc(time(v))],['model','Model'],['status','Status'],['input_tokens','Input'],['output_tokens','Output'],['estimated_usd','Estimated USD']])}</div>`;}
+  async function logs(){const visit=navigationId;const d=await api('admin/logs');if(visit!==navigationId)return;view.innerHTML=title('Operational logs','Redacted audit and AI usage records. Customer message bodies are excluded.')+`<div class="ctai-card"><h2>Audit</h2>${table(d.audit,[['created_at','Time',v=>esc(time(v))],['user_id','Actor'],['action','Action'],['target_id','Target'],['outcome','Outcome']])}</div><div class="ctai-card"><h2>AI usage</h2>${table(d.usage,[['created_at','Time',v=>esc(time(v))],['model','Model'],['status','Status'],['input_tokens','Input'],['output_tokens','Output'],['estimated_usd','Estimated USD']])}</div>`;}
   function download(name,data){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function bindPages(fn){view.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>{page=+b.dataset.page;run(fn);});}
   async function navigate(){
+    navigationId++;
     route=location.hash.slice(1)||'home';selected=null;message('');
     root.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',route.startsWith(a.dataset.nav)||(a.dataset.nav==='inbox'&&route.startsWith('conversation/'))));
     view.innerHTML='<div class="ctai-empty" role="status">Loading your workspace…</div>';
@@ -288,7 +303,21 @@
   async function poll(){if(polling||document.hidden||!navigator.onLine)return;polling=true;try{await bell();await api('agent/availability');if(route.startsWith('conversation/'))await updateConversation();else if(!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){if(route.startsWith('inbox'))await inbox();else if(route==='home')await home();else if(route.startsWith('notifications'))await notifications();}}catch(e){message(e.message);}finally{polling=false;}}
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)poll();});
   setInterval(poll,Math.max(5,+boot.poll)*1000);
-  if(mobile&&'serviceWorker'in navigator)navigator.serviceWorker.register(boot.app+'sw.js',{scope:boot.app}).then(reg=>{reg.addEventListener('updatefound',()=>{const worker=reg.installing;worker?.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller){message('An app update is available. Send or copy any draft before updating.',false);const apply=document.createElement('button');apply.textContent='Apply update';apply.onclick=()=>{if(confirm('Apply the update now? Unsent drafts will be lost.')){navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload(),{once:true});reg.waiting?.postMessage('ACTIVATE_UPDATE');}};alert.append(document.createTextNode(' '),apply);}});});}).catch(()=>message('Offline installation is unavailable. You can still use the connected app.',false));
+  function offerUpdate(reg) {
+    if(!reg.waiting||!navigator.serviceWorker.controller)return;
+    const banner=root.querySelector('#ctai-update');
+    banner.textContent='An app update is available. Send or copy any draft before updating. ';
+    banner.hidden=false;
+    const apply=document.createElement('button');apply.textContent='Apply update';
+    apply.onclick=()=>{if(confirm('Apply the update now? Unsent drafts will be lost.')){navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload(),{once:true});reg.waiting?.postMessage('ACTIVATE_UPDATE');}};
+    banner.append(apply);
+  }
+  if(mobile&&'serviceWorker'in navigator)navigator.serviceWorker.register(boot.app+'sw.js',{scope:boot.app}).then(reg=>{
+    offerUpdate(reg);
+    const watch=worker=>worker?.addEventListener('statechange',()=>{if(worker.state==='installed')offerUpdate(reg);});
+    watch(reg.installing);
+    reg.addEventListener('updatefound',()=>watch(reg.installing));
+  }).catch(()=>message('Offline installation is unavailable. You can still use the connected app.',false));
   if(!location.hash){const wpPage=new URLSearchParams(location.search).get('page')||'';const map={dashboard:'home',conversations:'inbox'};const initial=wpPage.replace('ctai-','');if(initial&&initial!=='ctai')history.replaceState(null,'','#'+(map[initial]||initial));}
   navigate();run(bell);
 })();

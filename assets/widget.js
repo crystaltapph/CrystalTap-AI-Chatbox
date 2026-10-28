@@ -18,7 +18,7 @@
   root.style.setProperty('--ctai-mobile-offset', `${cfg.mobile_offset}px`);
   root.style.setProperty('--ctai-width', `${cfg.width}px`);
   root.style.setProperty('--ctai-height', `${cfg.height}px`);
-  let open = embedded, csrf = '', conversation = null, lastSeq = 0, timer, pending = null, busy = false, initialized = false;
+  let open = embedded, csrf = '', conversation = null, lastSeq = 0, timer, pending = null, busy = false, initialized = false, conversationEpoch = 0, sessionExpired = false;
   const launcher = button('Chat with CrystalTap', 'ctai-launcher', () => toggle(true));
   launcher.setAttribute('aria-expanded', 'false');
   launcher.setAttribute('aria-controls', 'ctai-chat-panel');
@@ -36,8 +36,25 @@
   messages.append(chips);
   const notice = el('details', 'ctai-privacy'); notice.append(el('summary', '', 'Privacy and your conversation'), el('p', '', cfg.privacy_notice));
   const error = el('div', 'ctai-error'); error.setAttribute('role', 'status');
+  const channels = el('nav', 'ctai-channels'); channels.setAttribute('aria-label', 'Other ways to contact us');
+  function renderChannels() {
+    channels.replaceChildren();
+    const links = (Array.isArray(cfg.channels) ? cfg.channels : []).filter(item => ['whatsapp','messenger','viber'].includes(item.channel));
+    for (const item of links) {
+      // Restrict destinations again in the browser; no customer text is appended.
+      const safe = item.channel === 'whatsapp' ? /^https:\/\/wa\.me\/[1-9][0-9]{6,14}$/.test(item.url) : item.channel === 'messenger' ? /^https:\/\/m\.me\/[A-Za-z0-9.]{1,100}$/.test(item.url) : /^(?:viber:\/\/(?:chat\?number=%2B[1-9][0-9]{6,14}|pa\?chatURI=[A-Za-z0-9_.-]{1,100})|https:\/\/(?:vb\.me|invite\.viber\.com)\/[^\s]*)$/.test(item.url);
+      if (!safe) continue;
+      const link = el('a', 'ctai-channel ctai-channel-' + item.channel, {whatsapp:'WhatsApp',messenger:'Messenger',viber:'Viber'}[item.channel]);
+      link.href = item.url; link.rel = 'noopener noreferrer';
+      if (item.url.startsWith('https:')) link.target = '_blank';
+      link.setAttribute('aria-label', 'Contact us on ' + link.textContent); channels.append(link);
+    }
+    if (channels.children.length) channels.append(el('small', '', 'Opens another app. Replies stay in that app. Viber requires Viber installed.'));
+    channels.hidden = !channels.children.length;
+  }
+  renderChannels();
   const tools = el('div', 'ctai-tools');
-  tools.append(button('Talk to a person', '', async () => run(async () => { await ensureConversation(); conversation = await api(`public/conversations/${conversation.id}/handoff`, 'POST', {}); updateStatus(); error.textContent = 'Your request is in the support queue. An agent will respond when available.'; })), button('Leave contact details', '', () => showLead()), button('New chat', '', async () => run(async () => { if (!confirm('Start a new conversation? Your existing history follows the retention policy.')) return; await initialize(); conversation = await api('public/conversations', 'POST', {}); lastSeq = 0; messages.replaceChildren(el('div', 'ctai-bubble ctai-ai', cfg.welcome)); pending = null; input.value = ''; updateStatus(); })));
+  tools.append(button('Talk to a person', '', async () => run(async () => { await ensureConversation(); conversation = await api(`public/conversations/${conversation.id}/handoff`, 'POST', {}); updateStatus(); error.textContent = 'Your request is in the support queue. An agent will respond when available.'; })), button('Leave contact details', '', () => showLead()), button('New chat', '', async () => run(async () => { if (!confirm('Start a new conversation? Your existing history follows the retention policy.')) return; await initialize(); conversationEpoch++; conversation = await api('public/conversations', 'POST', {}); sessionExpired = false; lastSeq = 0; messages.replaceChildren(el('div', 'ctai-bubble ctai-ai', cfg.welcome)); pending = null; input.value = ''; updateStatus(); })));
   const form = el('form', 'ctai-composer');
   const input = el('textarea'); input.rows = 1; input.maxLength = 4000; input.placeholder = 'Type your question…'; input.setAttribute('aria-label', 'Message');
   const send = el('button', 'ctai-send', 'Send'); send.type = 'submit';
@@ -56,16 +73,22 @@
     });
     thinking.textContent = '';
   });
-  panel.append(header, messages, notice, error, tools, thinking, form); root.append(launcher, panel);
+  panel.append(header, messages, notice, channels, error, tools, thinking, form); root.append(launcher, panel);
   async function api(path, method = 'GET', data) {
     const response = await fetch(boot.api + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-CTAI-CSRF': csrf }, body: data === undefined ? undefined : JSON.stringify(data) });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Connection failed. Please retry.');
+    if (!response.ok) {
+      throw requestError(result);
+    }
     return result;
+  }
+  function requestError(result) {
+    if (result.code === 'session_expired') { sessionExpired = true; initialized = false; conversationEpoch++; return new Error('Your chat session expired. Select New chat to continue. Your draft is still here.'); }
+    return new Error(result.message || 'Connection failed. Please retry.');
   }
   async function streamMessage(payload) {
     const response = await fetch(boot.api + `public/conversations/${conversation.id}/stream`, { method:'POST', credentials:'same-origin', cache:'no-store', headers:{'Content-Type':'application/json','X-CTAI-CSRF':csrf,'Accept':'text/event-stream'}, body:JSON.stringify(payload) });
-    if (!response.ok) { const error = await response.json(); throw new Error(error.message || 'Unable to send message.'); }
+    if (!response.ok) { const error = await response.json(); throw requestError(error); }
     if (!response.body) throw new Error('Response interrupted. Retry to check delivery.');
     const reader=response.body.getReader(), decoder=new TextDecoder(); let buffer='', completed=null, provisional=null, provisionalText=null;
     try {
@@ -94,17 +117,17 @@
   }
   async function initialize() {
     if (initialized) return;
-    const data = await api('public/session'); Object.assign(cfg,data.config); csrf = data.csrf; initialized = true;
+    const data = await api('public/session'); Object.assign(cfg,data.config); renderChannels(); csrf = data.csrf; initialized = true;
     conversation = data.conversations.find(c => !['resolved', 'closed'].includes(c.status)) || data.conversations[0] || null;
     updateStatus();
   }
-  async function ensureConversation() { await initialize(); if (!conversation) conversation = await api('public/conversations', 'POST', {}); }
+  async function ensureConversation() { if(sessionExpired)throw new Error('Your chat session expired. Select New chat to continue.'); await initialize(); if (!conversation) conversation = await api('public/conversations', 'POST', {}); }
   function updateStatus() {
     const labels = { ai_active: 'AI assistance', human_requested: 'Requesting human support', waiting: 'Waiting for an agent', assigned: 'An agent is joining', human_active: 'Human support', resolved: 'Conversation resolved', closed: 'Conversation closed' };
     status.textContent = conversation ? labels[conversation.status] || 'Support' : 'AI and human support';
     const ended = conversation && ['resolved','closed'].includes(conversation.status);
-    input.disabled = !!ended || busy || !navigator.onLine; send.disabled = input.disabled;
-    if (ended) input.placeholder = 'Start a new chat to continue';
+    input.disabled = sessionExpired || !!ended || busy || !navigator.onLine; send.disabled = input.disabled;
+    input.placeholder = ended ? 'Start a new chat to continue' : 'Type your question…';
   }
   function appendMessage(m) {
     const bubble = el('article', `ctai-bubble ctai-${m.sender}`);
@@ -123,10 +146,12 @@
     messages.append(bubble);
   }
   async function refresh() {
-    if (!conversation || !navigator.onLine) return;
+    if (!conversation || sessionExpired || !navigator.onLine) return;
+    const id = conversation.id, epoch = conversationEpoch;
     let batch;
     do {
-      batch = await api(`public/conversations/${conversation.id}/messages?after=${lastSeq}`);
+      batch = await api(`public/conversations/${id}/messages?after=${lastSeq}`);
+      if (epoch !== conversationEpoch || +conversation?.id !== +id) return;
       conversation = batch.conversation;
       for (const m of batch.messages) { if (+m.seq > lastSeq) { appendMessage(m); lastSeq = +m.seq; } }
     } while (batch.messages.length === 100);

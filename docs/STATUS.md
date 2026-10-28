@@ -1,6 +1,6 @@
 # Development candidate status
 
-Version 0.1.3 is a development candidate. The live website has not been modified by this update, and live OpenAI/push behavior has not been certified.
+Version 0.1.4 is a development candidate. The live website has not been modified by this update, and live OpenAI/push behavior has not been certified.
 
 ## Implemented
 
@@ -18,9 +18,9 @@ Version 0.1.3 is a development candidate. The live website has not been modified
 
 The current development target is WordPress 7.1.3 / PHP 8.3 / MariaDB 10.11 and system Chromium on Linux.
 
-- 71 backend integration assertions: migrations, visitor isolation, capabilities, message/notification deduplication, private-note isolation, ownership, state transitions, encryption, SSE decoding, approved retrieval, lead consent, budgets, provider orchestration, streaming callbacks, summaries, takeover fencing, nested rollback and erasure.
+- 88 backend integration assertions: migrations, visitor isolation, capabilities, message/notification deduplication, private-note isolation, ownership, state transitions, encryption, SSE decoding, approved retrieval, lead consent, budgets, provider orchestration, streaming callbacks, summaries, takeover fencing, nested rollback and erasure.
 - Three real competing-process/database scenarios: one claim winner, bounded concurrent budget reservations, and one persisted message for competing duplicate submissions.
-- Five browser/API workflows: customer continuation/isolation/handoff; agent replies and private notes; mobile layout/bell/content/settings; explicit audio unlock, new-alert chimes and muting; SSE fallback plus CSRF/origin rejection and blocked development-file access.
+- Eleven browser/API workflows: customer continuation/isolation/handoff; agent replies and private notes; mobile layout/bell/content/settings; explicit audio unlock, new-alert chimes and muting; public contact settings and mobile links; delayed agent responses; draft retention during send; visitor-session recovery; persistent update prompt; delayed visitor history; SSE fallback plus CSRF/origin rejection and blocked development-file access.
 - PHP and JavaScript syntax checks; repeat installation/startup; release ZIP integrity and excluded-file checks.
 
 Deterministic AI tests use a provider substitute and do not prove live API compatibility, answer quality or provider billing. SSE tests validate local transport/decoding and fallback, not live proxy chunk timing. Chromium's phone-sized viewport does not establish physical iPhone/Android behavior.
@@ -59,3 +59,11 @@ Explicitly online agents remain eligible for new queue alerts after a sleeping b
 Profile now reports current sign-in registration, permission/configuration, push preference, quiet hours, worker schedule/age and the agent's pending push jobs. Its rate-limited push test is restricted to the user's valid current WordPress session and registered endpoint. The test bypasses cron and automatic-alert preferences deliberately. Production sends and tests share the same encryption and verified-TLS transport. Provider responses and credentials are not exposed. A test's acceptance does not establish receipt on a physical device.
 
 Foreground sound is enabled by a user gesture for the current open workspace only. Old alerts and repeated polls do not chime; mute stops new chimes. Closed/locked-phone sound remains controlled by the browser/OS. Five worker checks verify generic notification content, normal system-sound request, test content and click routing. Physical Android/iOS push and sound remain unverified.
+
+## 0.1.4 contact options and system review
+
+WhatsApp, Messenger and Viber are configurable public contact links. Phone numbers are normalized to international digits; Messenger/Viber destinations are restricted and revalidated on read. Blank contacts are hidden. Invalid saves leave current settings intact. No chat history is forwarded and no third-party SDK is loaded. Live two-way provider messaging is not implemented.
+
+The review fixed stale agent view/history responses overwriting another conversation, visitor history responses restoring an old conversation after New chat, newer agent drafts being cleared by a completed send, expired visitor sessions requiring a reload, missing immediate queue alerts after Reopen, and app updates already waiting or hidden by ordinary status messages. Settings types now follow schema defaults, keeping numeric contact strings stable across saves.
+
+Automated checks cover these regressions and existing chat/permissions/AI orchestration/push flows. `npm audit` reported zero known advisories for the locked JavaScript dependencies during this review. The Composer audit could not retrieve PHP advisories because network policy blocked `packagist.org`; PHP vulnerability status remains unverified. Production dependency versions were not changed. Physical app handoffs, customer accounts, live OpenAI/push, Namecheap cron and the actual site's theme/plugin interactions still require deployment testing.

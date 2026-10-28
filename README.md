@@ -6,7 +6,7 @@ No Chatway, RO Shop, WooCommerce, theme, external database, or hosted messaging 
 
 ## Install on WordPress
 
-Use the packaged `crystaltap-ai-chatbox-0.1.3.zip`, which includes production dependencies. Starting with **0.1.2**, GitHub → Code → Download ZIP also includes the production libraries. Older GitHub source archives omitted them. Check `plugin_version` and `push_diagnostic` under CrystalTap Settings → Environment health when diagnosing an installation. To build an installable package from source, follow the development and packaging commands below.
+Use the packaged `crystaltap-ai-chatbox-0.1.4.zip`, which includes production dependencies. Starting with **0.1.2**, GitHub → Code → Download ZIP also includes the production libraries. Older GitHub source archives omitted them. Check `plugin_version` and `push_diagnostic` under CrystalTap Settings → Environment health when diagnosing an installation. To build an installable package from source, follow the development and packaging commands below.
 
 If the source archive is already installed, back up the site, deactivate that copy, then upload and activate the packaged plugin. Accept WordPress's replacement prompt when offered. If WordPress creates a separate entry because the source folder has a different name, leave the source copy deactivated; keep only one CrystalTap copy active. Plugin-owned settings and tables are retained on deactivation.
 
@@ -72,3 +72,11 @@ Version 0.1.3 fixes new support-request alerts for explicitly Online agents whos
 For a chime while the workspace is open and visible, tap Profile → Enable / test in-app sound each time you reopen/reload it. Use Mute in-app sound to stop it. The browser/OS controls sound while the phone is locked.
 
 See [Namecheap scheduling and push troubleshooting](docs/OPERATIONS.md#namecheap-scheduling-and-push-troubleshooting) for hosting setup.
+
+## WhatsApp, Messenger and Viber
+
+In CrystalTap AI → Business Information, enter your WhatsApp number (including country code), your `https://m.me/YourPage` Messenger link, and your Viber number. You may instead provide an official Viber share/bot link in the optional Viber link field; it overrides the Viber number. Leave a contact blank to hide its button.
+
+These buttons open the relevant messaging app or website. Replies are handled in that service. CrystalTap website messages and history are not automatically transferred, and messages from those services do not appear in the CrystalTap agent inbox. Viber phone links need the Viber app installed. No additional provider API key is needed for contact buttons. Account ownership and app availability must be verified on your devices.
+
+Two-way inbox integration is a separate setup requiring the platforms' business accounts/API approvals, secure server credentials, verified webhooks and messaging-policy handling. No such accounts are provisioned by this plugin.

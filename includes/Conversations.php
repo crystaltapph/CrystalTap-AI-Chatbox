@@ -122,6 +122,7 @@ final class Conversations {
             self::update($c, $data);
             DB::insert('conversation_assignments', ['conversation_id' => $id, 'agent_id' => $data['assigned_agent'] ?? $c['assigned_agent'], 'actor_id' => $uid, 'action' => $action, 'created_at' => DB::now()]);
             if ($action === 'transfer' || $action === 'claim') { Notifications::emit((int) $data['assigned_agent'], 'assignment-' . $id . '-' . ($version + 1), $id, 'assignment', 'Conversation assigned to you'); }
+            if ($action === 'reopen') { Notifications::queue($id, 'handoff', 'A conversation was reopened for support', 'reopen-' . $id . '-' . ($version + 1)); }
             DB::audit('conversation_' . $action, $id);
             return self::view(self::get($id));
         });

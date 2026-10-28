@@ -102,3 +102,11 @@ After installing 0.1.3, reopen the agent app and accept its update when ready. I
 - For a sound while the workspace is open and visible, enable the optional in-app sound in Profile. It requires an explicit gesture after each page reload. Locked-phone notification sound uses the browser/OS notification channel; Web Push does not supply a custom ringtone.
 
 The plugin can repair a missing WordPress cron event, but cannot create a hosting-account scheduler. Development tests do not access the live Namecheap account or verify physical-phone delivery.
+
+## Messaging-app contact buttons
+
+Version 0.1.4 adds public contacts under Business Information. Use your own international WhatsApp/Viber numbers and the Messenger `m.me` link for your Facebook Page. An optional Viber official `vb.me` / `invite.viber.com` share link or `viber://pa?chatURI=...` bot link overrides the Viber number. Existing settings remain intact; new contact fields default to blank and no buttons appear until configured.
+
+Verify each destination on the intended Android/iPhone/desktop device. Viber phone deep links require the installed app. Messenger/WhatsApp use their supported website/app handoff. Messages and notifications after handoff belong to those platforms; CrystalTap's queue, bell and push apply to its website conversations. No website message text or customer identity is added to the destination links.
+
+A unified inbox would additionally need approved business APIs, signed/idempotent webhooks, account verification, outbound delivery/status tracking, applicable messaging-window/template rules and secure credential configuration. Contact buttons do not establish those integrations.
