@@ -1,12 +1,12 @@
-# Firebase live chat setup — plugin 0.3.0 and Android 0.1.4
+# Firebase live chat setup — plugin 0.3.2 and Android 0.1.5
 
-The website widget, browser agent workspace and Android foreground chat now listen for Firebase Realtime Database change signals. WordPress saves each message first, publishes a signal immediately after commit, and serves the authorized message history. Firebase receives opaque random markers and timestamps, never the chat message, name, email, phone, conversation ID or internal note. Background notifications still use FCM and the existing cron worker.
+The website widget, browser agent workspace and Android foreground chat now listen for Firebase Realtime Database change signals. WordPress saves each message first, publishes a signal immediately after commit, and serves the authorized message history. Firebase receives opaque random markers and timestamps, never the chat message, name, email, phone, conversation ID or internal note. Since plugin 0.3.2, background notifications use FCM with a first attempt at request completion and durable cron retries.
 
 ## 1. Install both updates
 
-Install [plugin 0.3.0](../downloads/wordpress/crystaltap-ai-chatbox-0.3.0.zip?raw=true) through WordPress → Plugins → Add New Plugin → Upload Plugin, replacing the current version. Keep one plugin copy active. Clear the website/page cache.
+Install [plugin 0.3.2](../downloads/wordpress/crystaltap-ai-chatbox-0.3.2.zip?raw=true) through WordPress → Plugins → Add New Plugin → Upload Plugin, replacing the current version. Keep one plugin copy active. Clear the website/page cache.
 
-Install [Android 0.1.4](../downloads/android/CrystalTap-Agent-0.1.4.apk?raw=true) over your existing CrystalTap app **without uninstalling**. It uses the same signing certificate. Existing conversations, Firebase notification credentials and approved devices are retained. Older app versions continue to work through regular refresh.
+Install [Android 0.1.5](../downloads/android/CrystalTap-Agent-0.1.5.apk?raw=true) over your existing CrystalTap app **without uninstalling**. It uses the same signing certificate. Existing conversations, Firebase notification credentials and approved devices are retained. Older app versions continue to work through regular refresh.
 
 Live updates are disabled until the following settings are complete. You can continue chatting during setup.
 
@@ -34,7 +34,7 @@ The Android listener uses the existing Android `google-services.json` configurat
 
 ## 5. Verify both directions
 
-Reload a website chat and reopen Android 0.1.4. The widget/browser workspace shows **● Live** once authenticated and connected. In Android **Profile → Notifications**, look for **Live updates connected**.
+Reload a website chat and reopen Android 0.1.5. The widget/browser workspace shows **● Live** once authenticated and connected. In Android **Profile → Notifications**, look for **Live updates connected**.
 
 Start a new visitor chat, send a message and confirm it appears in the agent inbox without manually refreshing. Claim the conversation, reply from Android, and confirm the visitor sees it. Leave an unsent draft in each client while receiving a reply; it should remain intact. Send several messages and check their order. Disconnect/reconnect the phone network, then confirm the missing history loads. Repeat from a second visitor: it must see only its own conversation. Verify private notes remain staff-only. If a client shows regular refresh, chat still works while its Firebase connection needs attention.
 
@@ -42,7 +42,7 @@ Test background FCM alerts separately with the phone locked. Realtime listeners 
 
 ## Cron and hosting
 
-**Keep Namecheap's once-per-minute WordPress cron.** Normal committed chat changes publish immediately without waiting for cron. Failed publishes remain in the existing jobs queue for bounded background retries. Cron also continues FCM alerts, follow-ups, summaries and maintenance. Firebase and hosting latency can still affect response times; this change removes the normal wait for the next message poll.
+**Keep Namecheap cron at the shortest interval your hosting plan allows.** Normal committed chat changes publish immediately without waiting for cron. Failed publishes remain in the existing jobs queue for bounded background retries. Cron continues failed/deferred FCM deliveries, scheduled follow-ups, summaries and maintenance. Firebase and hosting latency can still affect response times; this change removes the normal wait for the next message poll.
 
 The server needs outbound HTTPS to `oauth2.googleapis.com` and the project's database host. Clients need Firebase Authentication endpoints (`identitytoolkit.googleapis.com`, `securetoken.googleapis.com`) and the database HTTPS/WebSocket connection. Exclude private CrystalTap REST endpoints from caching as before. Keep TLS verification enabled.
 

@@ -3,6 +3,8 @@ namespace CrystalTap;
 defined('ABSPATH') || exit;
 
 final class Notifications {
+    private static array $pending=[];
+    private static bool $dispatching=false;
     public static function emit(int $user, string $event, int $conversation, string $type, string $title): void {
         global $wpdb;
         if (!user_can($user, 'ctai_agent')) { return; }
@@ -27,6 +29,7 @@ final class Notifications {
     public static function job(string $key, string $type, array $payload): void {
         global $wpdb;
         $wpdb->query($wpdb->prepare('INSERT IGNORE INTO ' . DB::table('jobs') . ' (dedup_key,type,payload,available_at,created_at) VALUES (%s,%s,%s,%s,%s)', $key, $type, wp_json_encode($payload), DB::now(), DB::now()));
+        if($type==='push'&&$wpdb->rows_affected)self::$pending[(int)$wpdb->insert_id]=DB::table('jobs');
     }
     public static function listing(int $user, int $before = 0): array {
         global $wpdb;
@@ -58,13 +61,22 @@ final class Notifications {
         $oldest=empty($queue['oldest'])?0:max(0,time()-strtotime($queue['oldest'].' UTC'));
         return ['last_worker'=>$last,'last_worker_age_seconds'=>$age,'pending_push_jobs'=>(int)($queue['pending']??0),'oldest_pending_push_age_seconds'=>$oldest,'worker_status'=>$age===null?'Not run yet':($age>120?'Delayed: check hosting cron':'Recently active')];
     }
-    public static function tick(): void {
-        global $wpdb;
-        $jobs = DB::table('jobs');
-        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $jobs WHERE available_at<=%s AND (locked_until IS NULL OR locked_until<%s) ORDER BY (type='realtime') ASC,id LIMIT 10", DB::now(), DB::now()), ARRAY_A);
-        foreach ($rows as $job) {
-            $claimed = $wpdb->query($wpdb->prepare("UPDATE $jobs SET locked_until=%s, attempts=attempts+1 WHERE id=%d AND (locked_until IS NULL OR locked_until<%s)", gmdate('Y-m-d H:i:s', time() + 120), $job['id'], DB::now()));
-            if (!$claimed) { continue; }
+    /** New committed alerts get a first attempt at request completion; cron owns durable retries. */
+    public static function flushPending(): void {
+        if(self::$dispatching||DB::inTransaction()||!self::$pending)return;
+        global $wpdb;$jobs=DB::table('jobs');$pending=self::$pending;self::$pending=[];self::$dispatching=true;$started=microtime(true);$attempted=0;
+        try{foreach($pending as$id=>$origin){if($attempted>=10||microtime(true)-$started>=20)break;if($origin!==$jobs)continue;$row=$wpdb->get_row($wpdb->prepare("SELECT * FROM $jobs WHERE id=%d AND type='push' AND available_at<=%s",$id,DB::now()),ARRAY_A);if($row){$attempted++;self::processJob($row);}}}
+        finally{self::$dispatching=false;}
+    }
+    public static function shutdown(): void {
+        if(DB::inTransaction()||!self::$pending)return;
+        if(!defined('WP_CLI')||!WP_CLI){if(function_exists('fastcgi_finish_request'))fastcgi_finish_request();elseif(function_exists('litespeed_finish_request'))litespeed_finish_request();}
+        try{self::flushPending();}catch(\Throwable $e){/* Durable jobs remain available to cron if dispatch cannot complete. */}
+    }
+    private static function processJob(array $job): void {
+        global $wpdb;$jobs=DB::table('jobs');
+            $claimed = $wpdb->query($wpdb->prepare("UPDATE $jobs SET locked_until=%s, attempts=attempts+1 WHERE id=%d AND available_at<=%s AND (locked_until IS NULL OR locked_until<%s)", gmdate('Y-m-d H:i:s', time() + 300), $job['id'], DB::now(), DB::now()));
+            if (!$claimed) { return; }
             try {
                 $payload = json_decode($job['payload'], true) ?: [];
                 if ($job['type'] === 'push') { Push::deliver((int) $payload['notification']); }
@@ -76,7 +88,12 @@ final class Notifications {
                 if ((int) $job['attempts'] >= 4) { $wpdb->delete($jobs, ['id' => $job['id']]); }
                 else { $wpdb->update($jobs, ['locked_until' => null, 'available_at' => gmdate('Y-m-d H:i:s', time() + min(3600, 60 * (2 ** (int) $job['attempts'])))], ['id' => $job['id']]); }
             }
-        }
+    }
+    public static function tick(): void {
+        global $wpdb;
+        $jobs = DB::table('jobs');
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $jobs WHERE available_at<=%s AND (locked_until IS NULL OR locked_until<%s) ORDER BY (type='realtime') ASC,id LIMIT 10", DB::now(), DB::now()), ARRAY_A);
+        foreach ($rows as $job) { self::processJob($job); }
         $due = $wpdb->get_col($wpdb->prepare('SELECT id FROM ' . DB::table('conversations') . " WHERE status='waiting' AND followup_at<=%s LIMIT 30", DB::now()));
         foreach ($due as $id) {
             DB::transaction(function () use ($id, $wpdb) {

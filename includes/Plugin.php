@@ -35,6 +35,7 @@ final class Plugin {
             return $response;
         }, 10, 3);
         add_action('ctai_tick', [Notifications::class, 'tick']);
+        add_action('shutdown', [Notifications::class, 'shutdown'], PHP_INT_MAX-1);
         add_action('shutdown', [Realtime::class, 'shutdown'], PHP_INT_MAX);
         add_action('ctai_cleanup', [Privacy::class, 'cleanup']);
         add_filter('authenticate', static function ($result, $username, $password) {

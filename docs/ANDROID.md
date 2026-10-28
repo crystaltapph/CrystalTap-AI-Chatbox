@@ -51,7 +51,7 @@ The channel is **CrystalTap support alerts**, with high importance, a bundled to
 
 Set Online for new queue alerts. From a separate visitor browser request human support, then verify the phone while the app is foregrounded, backgrounded, swiped away and locked. Verify notification tapping opens the right conversation and server authorization still applies. Test logout and remote device revocation. Ordinary AI-only chat does not generate agent alerts. Automatic alerts respect event preferences and website-timezone quiet hours; the manual Firebase test bypasses those preferences.
 
-Native push still uses the plugin's background job worker. Set a real one-minute WordPress scheduler if your hosting plan permits it. Namecheap shared-plan minimum intervals must be confirmed with support; a five-minute interval can delay alerts. Native Android does not fix a stopped server scheduler.
+Since plugin 0.3.2, native push gets a first delivery attempt at request completion, after message commit; cron retains failed/deferred jobs and scheduled work. Set a real one-minute WordPress scheduler if your hosting plan permits it. Namecheap shared-plan minimum intervals must be confirmed with support; a five-minute interval can delay retries and scheduled alerts. Native Android does not fix a stopped server scheduler.
 
 ## Intermittent or delayed alerts (plugin 0.2.1 / app 0.1.1)
 
@@ -69,7 +69,7 @@ Test in this order, spacing tests at least 15 seconds apart:
 
 If both local and remote alerts display silently, check the support channel sound, notification volume and DND. Android can rate-limit sound during bursts. On the POCO C65, use Profile → Background & battery, allow background autostart where offered and choose No restrictions for CrystalTap; menu names depend on MIUI/HyperOS. Reopen a force-stopped app. These settings do not bypass Android delivery limits.
 
-If direct Firebase tests arrive promptly but customer alerts wait, ask Namecheap to verify the real WordPress cron schedule. Use the shortest interval your hosting plan allows, ideally one minute. A five-minute schedule can add nearly five minutes before dispatch. Traffic-driven WP-Cron can wait longer when the site is idle. This update cannot configure your hosting account remotely.
+If direct Firebase tests arrive promptly but customer alerts wait, install plugin 0.3.2 for immediate first attempts, then check failures and the WordPress retry schedule. Use the shortest interval your hosting plan allows, ideally one minute. A five-minute schedule can add nearly five minutes before dispatch. Traffic-driven WP-Cron can wait longer when the site is idle. This update cannot configure your hosting account remotely.
 
 ## Remove the former PWA
 

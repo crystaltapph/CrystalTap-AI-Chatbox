@@ -1,6 +1,6 @@
 {
   "name": "crystaltap-ai-chatbox",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "scripts": {
     "test": "node --test tests/realtime-client.cjs && node tests/push-worker.cjs && playwright test",
