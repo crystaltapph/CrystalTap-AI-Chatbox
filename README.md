@@ -5,12 +5,14 @@ WordPress customer chat, a browser agent dashboard, and a dedicated **CrystalTap
 ## Install the update
 
 1. Back up the website and database. Install `dist/crystaltap-ai-chatbox-0.2.1.zip` in WordPress, keeping only one CrystalTap plugin copy active.
-2. Install `dist/CrystalTap-Agent-0.1.1.apk` on the Android phone (Android 8+). The candidate APK is signed; retain its signing identity for future updates.
+2. Install `dist/CrystalTap-Agent-0.1.2.apk` on the Android phone (Android 8+). The candidate APK is signed; retain its signing identity for future updates.
 3. Open the app. The website is preset to `https://crystaltapwater.com/`. Continue to the WordPress browser sign-in and approve the code only if it matches the app. Return to the app.
 4. Create/configure Firebase as described in [Android setup](docs/ANDROID.md). Without Firebase, chat and the browser dashboard work, but remote Android push does not.
 5. Enable notifications in the app, set Online, test local sound, then test Firebase push and a real visitor request for human support. A functioning hosting scheduler is still needed.
 
 Version 0.2.1 restores alerts for customer messages in an unclaimed support queue and exposes website worker/queue delay. App 0.1.1 adds opt-in system-displayed background alerts with the existing sound channel. See [intermittent-alert troubleshooting](docs/ANDROID.md#intermittent-or-delayed-alerts-plugin-021--app-011).
+
+Android app **0.1.2** refreshes the native interface with a card-based inbox, persistent bottom navigation, aligned chat bubbles, a clearer composer and grouped notification/account settings. [See the UI and rendered previews](docs/ANDROID-UI.md). It works with plugin 0.2.1.
 
 The WordPress page `/crystaltap-agent/` remains a browser workspace and device-approval page. It has no install prompt, manifest or offline cache. Opening it unregisters the old CrystalTap worker; a minimal retirement worker is retained for existing installations. Remove the old PWA/home-screen shortcut manually. Other site workers are left untouched.
 

@@ -45,12 +45,17 @@ def prepare(emulator=False):
     env['JAVA_OPTS']=env.get('JAVA_OPTS','')+' -Djavax.net.ssl.trustStore='+str(trust)+' -Djavax.net.ssl.trustStorePassword=changeit'
     args=[str(SDK/'cmdline-tools/latest/bin/sdkmanager'),'--sdk_root='+str(SDK)]
     if proxy.hostname:args+=['--proxy=http','--proxy_host='+proxy.hostname,'--proxy_port='+str(proxy.port or 80)]
-    licenses=subprocess.run(args+['--licenses'],input='y\n'*100,text=True,env=env,capture_output=True)
-    if licenses.returncode:raise RuntimeError('Android SDK license acceptance failed.')
     packages=['platforms;android-35','build-tools;35.0.0','platform-tools']
     if emulator:packages+=['emulator','system-images;android-28;google_apis;x86_64']
-    result=subprocess.run(args+packages,env=env,capture_output=True,text=True)
-    if result.returncode:raise RuntimeError('Android SDK package installation failed: '+result.stderr[-1000:])
+    # Reuse installed packages when building without network access. sdkmanager
+    # otherwise refreshes remote manifests even when every required tool exists.
+    markers={'platforms;android-35':'android.jar','build-tools;35.0.0':'apksigner','platform-tools':'adb','emulator':'emulator','system-images;android-28;google_apis;x86_64':'system.img'}
+    missing=[p for p in packages if not all((SDK/Path(*p.split(';'))/name).is_file() for name in ['package.xml',markers[p]])]
+    if missing:
+        licenses=subprocess.run(args+['--licenses'],input='y\n'*100,text=True,env=env,capture_output=True)
+        if licenses.returncode:raise RuntimeError('Android SDK license acceptance failed.')
+        result=subprocess.run(args+missing,env=env,capture_output=True,text=True)
+        if result.returncode:raise RuntimeError('Android SDK package installation failed: '+result.stderr[-1000:])
     (ROOT/'android/local.properties').write_text('sdk.dir='+str(SDK)+'\n')
     print('Android SDK, JDK and Gradle verified and prepared.')
     return env,gradle/'bin/gradle'

@@ -2,7 +2,7 @@
 
 ## What is delivered
 
-Plugin 0.2.1 supplies native device approval, opaque access tokens, encrypted device registrations and FCM HTTP-v1 delivery. Android app 0.1.1 provides native sign-in, inbox/claim/reply, internal notes, images, emoji, links, notifications, lead status updates, preferences and a dedicated alert channel. Product/AI/business administration stays in the browser workspace. There is no WebView wrapper.
+Plugin 0.2.1 supplies native device approval, opaque access tokens, encrypted device registrations and FCM HTTP-v1 delivery. Android app 0.1.2 provides native sign-in, inbox/claim/reply, internal notes, images, emoji, links, notifications, lead status updates, preferences and a dedicated alert channel. Product/AI/business administration stays in the browser workspace. There is no WebView wrapper.
 
 The user's website is `https://crystaltapwater.com/`. The user has since configured Firebase and reported successful but intermittent alerts. This workspace has no access to the live Google or WordPress administrator account, so it cannot independently certify delivery or POCO sound. The live site was not deployed from this workspace; its network access was initially blocked by the cloud egress policy.
 
@@ -13,6 +13,10 @@ Back up the site and test the plugin on staging. Upgrade the WordPress plugin be
 Open CrystalTap Agent and check the website address. Continue with WordPress. The app opens the normal website sign-in (including any existing 2FA/SSO). In the browser, compare the displayed eight-character code with the Android app and explicitly approve it. Return to the Android app and continue. Do not approve an unexpected pairing request.
 
 The app does not collect the WordPress password. The website issues a random device token only after browser approval and proof of the app's private verifier. The token is stored using Android Keystore-backed AES-GCM, expires after 30 days, and can be revoked under browser Profile → Android devices. Password/salt changes or WordPress session revocation invalidate access. Server auth must receive the `Authorization: Bearer` header intact; configure proxies accordingly.
+
+## App 0.1.2 interface update
+
+Install app 0.1.2 over 0.1.0 or 0.1.1 without uninstalling. It retains the same signing identity and works with plugin 0.2.1. The inbox, chat composer, alerts, leads and profile now share native card layouts and bottom navigation. Existing browser approval, private notes, images, notification settings and background delivery remain supported. See [the UI preview and validation notes](ANDROID-UI.md).
 
 ## Create Firebase (Google account action required)
 
@@ -29,7 +33,7 @@ Server requests use verified TLS to `oauth2.googleapis.com` and `fcm.googleapis.
 
 ## Alert sound and delivery tests
 
-Profile → Test local sound / notification checks the app's own Android notification channel without the server. Profile → Test Firebase push checks remote delivery to the current signed-in device. A provider-accepted result is not proof the device displayed or sounded an alert.
+Profile → Test local sound checks the app's own Android notification channel without the server. Profile → Test Firebase push checks remote delivery to the current signed-in device. A provider-accepted result is not proof the device displayed or sounded an alert.
 
 The channel is **CrystalTap support alerts**, with high importance, a bundled tone and vibration. Open Android notification sound settings from Profile to adjust it. Android owns existing channel settings: updates do not override a user's selected tone or silence setting. Grant notification permission on Android 13+. Mute, DND, force-stop, network loss and device power policy can still affect delivery/sound. An app force-stopped in Android Settings must be reopened.
 
@@ -43,15 +47,15 @@ Update the plugin first, then install the new APK over the old app without unins
 
 New customer messages in an unclaimed human-support conversation now create alerts for online agents and supervisors. AI-only chats remain silent. Duplicate message retries do not create extra notification records. Every automatic alert retains its event/tag across delivery retries. Unchanged token refreshes are idempotent and do not exhaust the registration-change limit when the app resumes repeatedly.
 
-Open Android Profile → Refresh website delivery status, or browser Settings → Environment health. Check `worker_status`, `last_worker_age_seconds`, `pending_push_jobs` and `oldest_pending_push_age_seconds`. These are aggregate diagnostics without credentials or message content. A worker age over 120 seconds indicates the scheduler needs investigation; a pending queue may also include provider retries. A recently completed worker does not prove the phone received the alert.
+Open Android Profile → Refresh delivery status, or browser Settings → Environment health. Check `worker_status`, `last_worker_age_seconds`, `pending_push_jobs` and `oldest_pending_push_age_seconds`. These are aggregate diagnostics without credentials or message content. A worker age over 120 seconds indicates the scheduler needs investigation; a pending queue may also include provider retries. A recently completed worker does not prove the phone received the alert.
 
 Test in this order, spacing tests at least 15 seconds apart:
 
-1. Profile → Test local sound / notification checks the phone channel only.
+1. Profile → Test local sound checks the phone channel only.
 2. Profile → Test Firebase push sends immediately, bypassing the website job queue. Verify it with the phone locked as well as open.
 3. Set Online and use a separate visitor to request human support and send another message. Test both waiting and claimed conversations. Automatic alerts use the WordPress worker and respect notification preferences/quiet hours.
 
-If both local and remote alerts display silently, check the support channel sound, notification volume and DND. Android can rate-limit sound during bursts. On the POCO C65, use Android app & battery settings, allow background autostart where offered and choose No restrictions for CrystalTap; menu names depend on MIUI/HyperOS. Reopen a force-stopped app. These settings do not bypass Android delivery limits.
+If both local and remote alerts display silently, check the support channel sound, notification volume and DND. Android can rate-limit sound during bursts. On the POCO C65, use Profile → Background & battery, allow background autostart where offered and choose No restrictions for CrystalTap; menu names depend on MIUI/HyperOS. Reopen a force-stopped app. These settings do not bypass Android delivery limits.
 
 If direct Firebase tests arrive promptly but customer alerts wait, ask Namecheap to verify the real WordPress cron schedule. Use the shortest interval your hosting plan allows, ideally one minute. A five-minute schedule can add nearly five minutes before dispatch. Traffic-driven WP-Cron can wait longer when the site is idle. This update cannot configure your hosting account remotely.
 
@@ -61,7 +65,7 @@ No new manifest/install/offline/push feature is served. The old manifest returns
 
 ## Signing and reproducible builds
 
-Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.1.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
+Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.2.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
 
 The build creates a local candidate signing identity in `.runtime/android-signing.jks` with its private password in `.runtime/android-signing.json`. Both are mode 0600 and ignored by Git. Back them up securely outside the checkout before replacing the environment. **Future APK updates must use the same signing key.** Do not publish those files or cache them in public CI artifacts. A fresh CI build creates a different candidate identity; its APK is a test artifact, not an update for an already distributed build. Google Play distribution needs its own account, policy review and release-signing plan.
 
