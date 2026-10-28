@@ -49,8 +49,8 @@ final class API {
         self::route('/native/link/complete','POST',static function($r){$b=self::input($r);return Native::complete((string)($b['id']??''),(string)($b['verifier']??''));},'public');
         self::route('/agent/android-link/(?P<id>[a-f0-9]{48})','GET',static fn($r)=>Native::review($r['id']));
         self::route('/agent/android-link/(?P<id>[a-f0-9]{48})','POST',static function($r){$b=self::input($r);return Native::approve($r['id'],(string)($b['code']??''));});
-        self::route('/native/config','GET',static function(){Native::current();return ['firebase'=>NativePush::config()['client'],'push_configured'=>NativePush::status()['configured'],'user'=>Plugin::bootstrap()['user'],'site'=>untrailingslashit(home_url())];});
-        self::route('/native/device','PUT',static function($r){Auth::rate('android_registration',20,3600,(string)get_current_user_id());$b=self::input($r);return Native::register((string)($b['token']??''));});
+        self::route('/native/config','GET',static function(){Native::current();return ['firebase'=>NativePush::config()['client'],'push_configured'=>NativePush::status()['configured'],'user'=>Plugin::bootstrap()['user'],'site'=>untrailingslashit(home_url()),'worker'=>Notifications::health()];});
+        self::route('/native/device','PUT',static function($r){$b=self::input($r);return Native::register((string)($b['token']??''),($b['system_notifications']??false)===true);});
         self::route('/native/logout','POST',static fn()=>Native::revoke((int)Native::current()['id'],get_current_user_id()));
         self::route('/native/push-test','POST',static function(){Auth::rate('android_test',3,60,(string)get_current_user_id());NativePush::send(Native::current(),0,true);return ['accepted'=>true,'message'=>'Firebase accepted the test. Check your phone; acceptance alone does not confirm receipt.'];});
         self::route('/agent/native-devices','GET',static fn()=>Native::devices(get_current_user_id()));
@@ -177,7 +177,7 @@ final class API {
             return $result;
         }, 'supervise');
         self::route('/admin/health', 'GET', static function () {
-            return ['image_upload_ready'=>extension_loaded('gd')&&function_exists('imagewebp'),'plugin_version'=>CTAI_VERSION,'https'=>is_ssl(),'openai_key_configured'=>(bool)Settings::secret('openai_key'),'android_push_configured'=>NativePush::status()['configured'],'android_openssl_ready'=>NativePush::status()['openssl'],'last_worker'=>(int)get_option('ctai_last_tick'),'cron_note'=>'Run WordPress cron every minute for timely Android alerts.'];
+            return ['image_upload_ready'=>extension_loaded('gd')&&function_exists('imagewebp'),'plugin_version'=>CTAI_VERSION,'https'=>is_ssl(),'openai_key_configured'=>(bool)Settings::secret('openai_key'),'android_push_configured'=>NativePush::status()['configured'],'android_openssl_ready'=>NativePush::status()['openssl'],...Notifications::health(),'cron_note'=>'Run WordPress cron every minute for timely Android alerts.'];
         }, 'manage');
         self::route('/admin/credentials', 'PUT', static function ($r) {
             if (!is_ssl() && !in_array(wp_parse_url(home_url(), PHP_URL_HOST), ['localhost','127.0.0.1'], true)) { throw new Fault('HTTPS is required', 403); }

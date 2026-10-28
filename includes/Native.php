@@ -63,6 +63,18 @@ final class Native {
     public static function isNative(): bool {return self::$device!==null;}
     public static function current(): array { if (!self::$device) { throw new Fault('Use the signed-in Android app for this action.',403); }return self::$device; }
     public static function devices(int $user): array {global $wpdb;return $wpdb->get_results($wpdb->prepare('SELECT id,label,created_at,expires_at,(fcm_token IS NOT NULL) AS push_registered FROM '.DB::table('native_devices').' WHERE user_id=%d AND expires_at>%s ORDER BY id DESC',$user,DB::now()),ARRAY_A);}
-    public static function register(string $token): array {global $wpdb;$row=self::current();if(strlen($token)<20||strlen($token)>4096||preg_match('/[\s\x00-\x1f]/',$token)){throw new Fault('Invalid Android push registration.');}$wpdb->update(DB::table('native_devices'),['fcm_token'=>Push::encrypt($token)],['id'=>$row['id']]);return ['registered'=>true];}
+    public static function register(string $token, bool $systemNotifications=false): array {
+        global $wpdb;
+        $row=self::current();
+        if(strlen($token)<20||strlen($token)>4096||preg_match('/[\s\x00-\x1f]/',$token)) {throw new Fault('Invalid Android push registration.');}
+        // App resumes refresh the same registration frequently. Only actual changes
+        // consume the limit, so checking settings cannot exhaust token registration.
+        if (!empty($row['fcm_token']) && (bool)$row['system_notifications']===$systemNotifications && hash_equals(Push::decrypt($row['fcm_token']),$token)) {
+            return ['registered'=>true];
+        }
+        Auth::rate('android_registration_change',20,3600,(string)$row['id']);
+        $wpdb->update(DB::table('native_devices'),['fcm_token'=>Push::encrypt($token),'system_notifications'=>$systemNotifications?1:0],['id'=>$row['id']]);
+        return ['registered'=>true];
+    }
     public static function revoke(int $id, int $user): array {global $wpdb;$row=$wpdb->get_row($wpdb->prepare('SELECT * FROM '.DB::table('native_devices').' WHERE id=%d AND user_id=%d',$id,$user),ARRAY_A);if($row){$sessions=get_user_meta($user,'session_tokens',true)?:[];unset($sessions[$row['session_hash']]);update_user_meta($user,'session_tokens',$sessions);$wpdb->delete(DB::table('native_devices'),['id'=>$id]);}return ['revoked'=>true];}
 }

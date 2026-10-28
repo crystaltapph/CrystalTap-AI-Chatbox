@@ -1,6 +1,6 @@
-# Operations — plugin 0.2.0 and native Android
+# Operations — plugin 0.2.1 and native Android
 
-For installation, Firebase configuration, Android signing and delivery testing, use [ANDROID.md](ANDROID.md). Old PWA/Web Push/VAPID instructions below are historical and do not apply to 0.2.0. Browser push is retired; keep a backup before upgrading. The existing WordPress browser dashboard remains supported.
+For installation, Firebase configuration, Android signing and delivery testing, use [ANDROID.md](ANDROID.md). Old PWA/Web Push/VAPID instructions below are historical and do not apply to 0.2.1. Browser push is retired; keep a backup before upgrading. The existing WordPress browser dashboard remains supported.
 
 Current requirements: single-site WordPress 6.6+, PHP 8.2+ with OpenSSL and GD, HTTPS, forwarded Authorization headers, uncached private REST/image responses, database backups including private images, and a functioning server job scheduler. FCM HTTP-v1 uses WordPress HTTPS requests and OpenSSL JWT signing; the former Web Push dependency bundle is removed. Real Firebase credentials must be saved through administrator settings; never print them or use unrelated platform Google credentials.
 

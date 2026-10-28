@@ -38,6 +38,8 @@ final class Conversations {
         self::event((int) $conversation['id'], $internal ? 'note' : 'message');
         if ($sender === 'customer' && $conversation['assigned_agent']) {
             Notifications::emit((int) $conversation['assigned_agent'], 'message-' . $id, (int) $conversation['id'], 'message', 'New customer message');
+        } elseif ($sender === 'customer' && $conversation['status'] === 'waiting') {
+            Notifications::queue((int) $conversation['id'], 'message', 'New customer message in the support queue', 'message-' . $id);
         }
         return $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id), ARRAY_A);
     }

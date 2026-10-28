@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.crystaltap.agent'
     compileSdk 35
-    defaultConfig { applicationId 'com.crystaltap.agent'; minSdk 26; targetSdk 35; versionCode 1; versionName '0.1.0'; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
+    defaultConfig { applicationId 'com.crystaltap.agent'; minSdk 26; targetSdk 35; versionCode 2; versionName '0.1.1'; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     signingConfigs { candidate { storeFile file(System.getenv('CTAI_ANDROID_STORE_FILE') ?: 'missing-signing-key'); storePassword System.getenv('CTAI_ANDROID_STORE_PASSWORD'); keyAlias 'crystaltap'; keyPassword System.getenv('CTAI_ANDROID_STORE_PASSWORD') } }
     buildTypes { release { minifyEnabled false; signingConfig signingConfigs.candidate } }

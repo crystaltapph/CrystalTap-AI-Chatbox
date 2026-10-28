@@ -2,9 +2,9 @@
 
 ## What is delivered
 
-Plugin 0.2.0 supplies native device approval, opaque access tokens, encrypted device registrations and FCM HTTP-v1 delivery. Android app 0.1.0 provides native sign-in, inbox/claim/reply, internal notes, images, emoji, links, notifications, lead status updates, preferences and a dedicated alert channel. Product/AI/business administration stays in the browser workspace. There is no WebView wrapper.
+Plugin 0.2.1 supplies native device approval, opaque access tokens, encrypted device registrations and FCM HTTP-v1 delivery. Android app 0.1.1 provides native sign-in, inbox/claim/reply, internal notes, images, emoji, links, notifications, lead status updates, preferences and a dedicated alert channel. Product/AI/business administration stays in the browser workspace. There is no WebView wrapper.
 
-The user's website is `https://crystaltapwater.com/`. A Firebase project did not exist at development time. No Google project has been created or configured by this work, and no live Firebase delivery or POCO sound result is certified. The live site was not deployed from this workspace; its network access was initially blocked by the cloud egress policy.
+The user's website is `https://crystaltapwater.com/`. The user has since configured Firebase and reported successful but intermittent alerts. This workspace has no access to the live Google or WordPress administrator account, so it cannot independently certify delivery or POCO sound. The live site was not deployed from this workspace; its network access was initially blocked by the cloud egress policy.
 
 ## Install and sign in
 
@@ -37,13 +37,31 @@ Set Online for new queue alerts. From a separate visitor browser request human s
 
 Native push still uses the plugin's background job worker. Set a real one-minute WordPress scheduler if your hosting plan permits it. Namecheap shared-plan minimum intervals must be confirmed with support; a five-minute interval can delay alerts. Native Android does not fix a stopped server scheduler.
 
+## Intermittent or delayed alerts (plugin 0.2.1 / app 0.1.1)
+
+Update the plugin first, then install the new APK over the old app without uninstalling. The same signing identity is retained. The server keeps the original data-only payload for app 0.1.0; app 0.1.1 explicitly opts in to generic Firebase notification-plus-data payloads. Firebase displays background alerts on the existing CrystalTap channel; foreground alerts use the native service. Notification taps handle both Firebase string IDs and local integer IDs, and access is still checked by the server. No customer message text is sent in notification payloads.
+
+New customer messages in an unclaimed human-support conversation now create alerts for online agents and supervisors. AI-only chats remain silent. Duplicate message retries do not create extra notification records. Every automatic alert retains its event/tag across delivery retries. Unchanged token refreshes are idempotent and do not exhaust the registration-change limit when the app resumes repeatedly.
+
+Open Android Profile → Refresh website delivery status, or browser Settings → Environment health. Check `worker_status`, `last_worker_age_seconds`, `pending_push_jobs` and `oldest_pending_push_age_seconds`. These are aggregate diagnostics without credentials or message content. A worker age over 120 seconds indicates the scheduler needs investigation; a pending queue may also include provider retries. A recently completed worker does not prove the phone received the alert.
+
+Test in this order, spacing tests at least 15 seconds apart:
+
+1. Profile → Test local sound / notification checks the phone channel only.
+2. Profile → Test Firebase push sends immediately, bypassing the website job queue. Verify it with the phone locked as well as open.
+3. Set Online and use a separate visitor to request human support and send another message. Test both waiting and claimed conversations. Automatic alerts use the WordPress worker and respect notification preferences/quiet hours.
+
+If both local and remote alerts display silently, check the support channel sound, notification volume and DND. Android can rate-limit sound during bursts. On the POCO C65, use Android app & battery settings, allow background autostart where offered and choose No restrictions for CrystalTap; menu names depend on MIUI/HyperOS. Reopen a force-stopped app. These settings do not bypass Android delivery limits.
+
+If direct Firebase tests arrive promptly but customer alerts wait, ask Namecheap to verify the real WordPress cron schedule. Use the shortest interval your hosting plan allows, ideally one minute. A five-minute schedule can add nearly five minutes before dispatch. Traffic-driven WP-Cron can wait longer when the site is idle. This update cannot configure your hosting account remotely.
+
 ## Remove the former PWA
 
 No new manifest/install/offline/push feature is served. The old manifest returns HTTP 410; old browser-push API routes return a retirement message. The browser workspace unregisters only the CrystalTap-scoped worker and unsubscribes its old browser endpoint. The retirement worker removes only `ctai-shell-*` caches and unregisters itself. Remove the old installed web app/shortcut manually. Preserve the WordPress plugin database during upgrade; old browser subscription data and encrypted VAPID options are retained inert for backup/rollback, but are not used for delivery.
 
 ## Signing and reproducible builds
 
-Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.0.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
+Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.1.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
 
 The build creates a local candidate signing identity in `.runtime/android-signing.jks` with its private password in `.runtime/android-signing.json`. Both are mode 0600 and ignored by Git. Back them up securely outside the checkout before replacing the environment. **Future APK updates must use the same signing key.** Do not publish those files or cache them in public CI artifacts. A fresh CI build creates a different candidate identity; its APK is a test artifact, not an update for an already distributed build. Google Play distribution needs its own account, policy review and release-signing plan.
 

@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.2.0
+Stable tag: 0.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,6 +50,9 @@ Native Android push needs Firebase configuration and Google Play services. Physi
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.2.1 =
+Alert online agents when customers send more messages in an unclaimed support conversation. Avoid throttling unchanged device-registration refreshes. Add scheduler/queue-delay diagnostics and opt-in Firebase system notifications for Android app 0.1.1, preserving compatibility with the original APK.
 
 = 0.2.0 =
 Replace PWA/browser push with a native Android app, browser-approved device pairing, revocable encrypted sessions, Firebase HTTP-v1 alerts and a dedicated notification channel. Retire old worker/cache/install routes while preserving the browser dashboard and existing customer data.

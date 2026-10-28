@@ -17,7 +17,7 @@ if not keystore.exists():
 tasks=[':app:assembleRelease']
 if args.test:tasks+=[':app:testDebugUnitTest',':app:lintDebug']
 subprocess.run([str(gradle),'-p',str(ROOT/'android'),'--no-daemon','--max-workers=2',*tasks],env=env,check=True)
-out=ROOT/'dist';out.mkdir(exist_ok=True);target=out/'CrystalTap-Agent-0.1.0.apk';shutil.copyfile(ROOT/'android/app/build/outputs/apk/release/app-release.apk',target);target.chmod(0o644)
+out=ROOT/'dist';out.mkdir(exist_ok=True);target=out/'CrystalTap-Agent-0.1.1.apk';shutil.copyfile(ROOT/'android/app/build/outputs/apk/release/app-release.apk',target);target.chmod(0o644)
 verify=subprocess.run([str(ROOT/'.runtime/android-sdk/build-tools/35.0.0/apksigner'),'verify','--verbose',str(target)],env=env,capture_output=True,text=True)
 if verify.returncode:raise SystemExit('APK signature verification failed.')
 digest=hashlib.sha256(target.read_bytes()).hexdigest();(out/'ANDROID-SHA256SUMS').write_text(digest+'  '+target.name+'\n')

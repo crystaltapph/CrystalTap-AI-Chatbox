@@ -49,6 +49,15 @@ final class Notifications {
         $raw = $wpdb->get_var($wpdb->prepare('SELECT preferences FROM ' . DB::table('agent_profiles') . ' WHERE user_id=%d', $user));
         return array_replace(['push' => true, 'message' => true, 'handoff' => true, 'lead' => true, 'followup' => true, 'assignment' => true, 'quiet_start' => '', 'quiet_end' => ''], json_decode($raw ?: '{}', true) ?: []);
     }
+    /** Aggregate delivery diagnostics only; no customer text or device credentials. */
+    public static function health(): array {
+        global $wpdb;
+        $last=(int)get_option('ctai_last_tick');
+        $age=$last?max(0,time()-$last):null;
+        $queue=$wpdb->get_row("SELECT COUNT(*) AS pending, MIN(created_at) AS oldest FROM ".DB::table('jobs')." WHERE type='push'",ARRAY_A);
+        $oldest=empty($queue['oldest'])?0:max(0,time()-strtotime($queue['oldest'].' UTC'));
+        return ['last_worker'=>$last,'last_worker_age_seconds'=>$age,'pending_push_jobs'=>(int)($queue['pending']??0),'oldest_pending_push_age_seconds'=>$oldest,'worker_status'=>$age===null?'Not run yet':($age>120?'Delayed: check hosting cron':'Recently active')];
+    }
     public static function tick(): void {
         global $wpdb;
         $jobs = DB::table('jobs');
