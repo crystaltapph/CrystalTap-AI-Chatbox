@@ -9,7 +9,7 @@ import zipfile
 
 os.chdir(Path(__file__).resolve().parents[1])
 parser=argparse.ArgumentParser()
-parser.add_argument('--artifact',default='dist/crystaltap-ai-chatbox-0.2.3.zip')
+parser.add_argument('--artifact',default='dist/crystaltap-ai-chatbox-0.3.0.zip')
 artifact=Path(parser.parse_args().artifact).resolve()
 root=Path.cwd()
 relative=artifact.relative_to(root)
@@ -39,11 +39,12 @@ wp eval 'global $wpdb;$n=count($wpdb->get_col($wpdb->prepare("SHOW TABLES LIKE %
 wp eval '$users=get_users(["role"=>"administrator","number"=>1]);wp_set_current_user($users[0]->ID);$verifier=bin2hex(random_bytes(32));$pair=CrystalTap\Native::begin(hash("sha256",$verifier));CrystalTap\Native::approve($pair["id"],$pair["code"]);$login=CrystalTap\Native::complete($pair["id"],$verifier);$device=CrystalTap\Native::authenticateToken($login["token"]);if(get_current_user_id()!==$users[0]->ID||strlen($login["token"])!==64){throw new Exception("Packaged Android sign-in failed");}CrystalTap\Native::revoke((int)$device["id"],$users[0]->ID);echo "NATIVE_PAIR_SMOKE_OK\n";'
 wp eval '$users=get_users(["role"=>"administrator","number"=>1]);wp_set_current_user($users[0]->ID);$request=new WP_REST_Request("PUT","/crystaltap-ai/v1/admin/settings");$request->set_header("Content-Type","application/json");$request->set_body(wp_json_encode(["whatsapp_number"=>"+63 912 345 6789","messenger_url"=>"https://m.me/CrystalTapFixture","viber_number"=>"+63 912 345 6789"]));$response=rest_do_request($request);$links=CrystalTap\Settings::publicConfig()["channels"]??[];if($response->get_status()!==200||count($links)!==3||$links[0]["url"]!=="https://wa.me/639123456789"||$links[2]["url"]!=="viber://chat?number=%2B639123456789"){throw new Exception("Packaged contact configuration failed");}echo "CHANNEL_SMOKE_OK\n";'
 wp eval 'wp_set_current_user(0);$s=CrystalTap\Auth::session(true);$r=new WP_REST_Request("POST","/crystaltap-ai/v1/public/conversations");$r->set_header("Content-Type","application/json");$r->set_header("X-CTAI-CSRF",$s["csrf"]);$r->set_body(wp_json_encode(["name"=>"Package customer"]));$response=rest_do_request($r);$id=(int)($response->get_data()["id"]??0);if($response->get_status()!==200||CrystalTap\Customer::details(CrystalTap\Conversations::get($id))["name"]!=="Package customer"){throw new Exception("Packaged customer profile failed");}echo "CUSTOMER_SMOKE_OK\n";'
+wp eval 'if(!class_exists("CrystalTap\\Realtime")||CrystalTap\Realtime::enabled()||!is_readable(CTAI_DIR."assets/realtime.js")||!is_readable(CTAI_DIR."assets/realtime-settings.js")||json_decode(file_get_contents(CTAI_DIR."assets/firebase-database.rules.json"),true)!==CrystalTap\Realtime::rules()){throw new Exception("Packaged realtime dependencies or private rules missing");}echo "REALTIME_SMOKE_OK\n";'
 wp eval '$path=tempnam(sys_get_temp_dir(),"ctai-image");try{$pixel=imagecreatetruecolor(4,4);imagepng($pixel,$path);imagedestroy($pixel);$image=CrystalTap\Images::clean($path,"fixture.png");if($image["mime"]!=="image/png"||!is_readable(CTAI_DIR."assets/chat-ui.js")){throw new Exception("Packaged image processing or shared controls unavailable");}}finally{unlink($path);}echo "CHAT_FEATURES_SMOKE_OK\n";'
 '''
 r=subprocess.run(['docker','compose','run','--rm','-T','-e','CTAI_ZIP_TEST_PASSWORD','-e','CTAI_ZIP_TEST_PREFIX','-e','CTAI_TEST_ARTIFACT','-e','CTAI_TEST_PLUGIN_SLUG','cli','sh','-c',script],env=env,text=True,capture_output=True)
-if r.returncode or 'PACKAGE_SMOKE_OK' not in r.stdout or 'NATIVE_PAIR_SMOKE_OK' not in r.stdout or 'CHANNEL_SMOKE_OK' not in r.stdout or 'CHAT_FEATURES_SMOKE_OK' not in r.stdout or 'CUSTOMER_SMOKE_OK' not in r.stdout:
+if r.returncode or 'PACKAGE_SMOKE_OK' not in r.stdout or 'NATIVE_PAIR_SMOKE_OK' not in r.stdout or 'CHANNEL_SMOKE_OK' not in r.stdout or 'CHAT_FEATURES_SMOKE_OK' not in r.stdout or 'CUSTOMER_SMOKE_OK' not in r.stdout or 'REALTIME_SMOKE_OK' not in r.stdout:
     # Credentials are intentionally never included in diagnostic output.
     safe=(r.stdout+r.stderr).replace(env['CTAI_ZIP_TEST_PASSWORD'],'[redacted]')
     raise SystemExit('Package installation test failed:\n'+safe[-5000:])
-print('PASS: built ZIP installs and activates; 20 tables, native device pairing and public contacts, required customer profiles and image processing verified.')
+print('PASS: built ZIP installs and activates; 20 tables, native device pairing and public contacts, required customer profiles, image processing and disabled-by-default realtime/rules bundle verified.')

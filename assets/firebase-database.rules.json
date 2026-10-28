@@ -1,0 +1,15 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "ctai": {
+      "$site": {
+        ".indexOn": ["expires"],
+        "$feed": {
+          ".read": "auth != null && auth.uid === $feed && auth.token.ctai_site === $site && auth.token.ctai_feed === $feed && auth.token.ctai_until > now",
+          ".write": false
+        }
+      }
+    }
+  }
+}

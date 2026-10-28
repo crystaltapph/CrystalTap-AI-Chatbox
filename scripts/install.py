@@ -18,4 +18,5 @@ if trust.is_file():
 command+=['composer:2','install','--no-dev','--prefer-source','--no-interaction','--no-progress']
 subprocess.run(command,check=True)
 subprocess.run(['npm','ci','--cache','/tmp/ctai-npm-cache','--no-audit','--no-fund'],check=True)
+subprocess.run(['npm','run','build:realtime'],check=True)
 print('Locked PHP and browser-test dependencies installed.')

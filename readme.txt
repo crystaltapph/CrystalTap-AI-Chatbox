@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.2.3
+Stable tag: 0.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -40,16 +40,20 @@ Embedded mode takes precedence if multiple launch points exist on the same page.
 Conversation content is stored in dedicated tables in your WordPress database.
 When AI is enabled, relevant recent messages and approved business sources are sent to OpenAI.
 Android alerts use Firebase Cloud Messaging and include bounded public customer message previews. Private team notes are excluded. Android lock-screen settings control preview visibility. New chats collect a required name and optional email/phone for support; these details follow conversation retention and privacy export/erasure.
+Optional Firebase Realtime Database stores only opaque update markers, not chat messages or contact details; WordPress remains the canonical chat store.
 Use privacy tools and an approved retention policy. Deactivation/uninstall preserve data.
 
 == Known limitations ==
 
-Single-site WordPress only. No offline sends. Image attachments require PHP GD and obey size/rate limits. Polling is not instant delivery.
+Single-site WordPress only. No offline sends. Image attachments require PHP GD and obey size/rate limits. Optional Firebase live listeners reduce polling delay; connectivity and hosting latency still affect delivery.
 AI streaming is opt-in and depends on hosting/proxy buffering. Background summaries require a functioning scheduler.
 Native Android push needs Firebase configuration and Google Play services. Physical-device testing is required before release.
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.3.0 =
+Add scoped Firebase live update signals for customer chat, the browser workspace and Android 0.1.4. Publish after message commits with a durable retry queue, short-lived custom-token access, reconnect recovery and polling fallback. Retain cron for push notifications, retries and maintenance.
 
 = 0.2.3 =
 Add configurable {name} welcome messages, actual assigned-agent status and typing names, a larger responsive chat window with maximize controls, and compact secondary options. Hide AI-disabled support updates and remove the external-app disclaimer.

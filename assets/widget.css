@@ -54,3 +54,5 @@
  .ctai-header{padding:11px 12px}.ctai-header-actions{gap:5px}.ctai-messages{padding:14px}.ctai-bubble{max-width:90%}.ctai-composer textarea{font-size:16px}.ctai-panel{max-width:100%}
 }
 @media(prefers-reduced-motion:reduce){.ctai-messages{scroll-behavior:auto}.is-typing:after{animation:none}}
+
+.ctai-live-status{display:block;font-size:10px;opacity:.9}.ctai-live-status:empty{display:none}

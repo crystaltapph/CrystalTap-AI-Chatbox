@@ -9,20 +9,19 @@ final class DB {
         return apply_filters('ctai_table_prefix', $wpdb->prefix . 'crystaltap_ai_') . $name;
     }
     public static function now(): string { return gmdate('Y-m-d H:i:s'); }
+    public static function inTransaction(): bool {return self::$depth>0;}
     public static function transaction(callable $callback): mixed {
         global $wpdb;
-        $level = self::$depth++;
-        $wpdb->query($level === 0 ? 'START TRANSACTION' : 'SAVEPOINT ctai_' . $level);
-        try {
-            $result = $callback();
-            if ($wpdb->query($level === 0 ? 'COMMIT' : 'RELEASE SAVEPOINT ctai_' . $level) === false) { throw new \RuntimeException('Commit failed'); }
-            self::$depth--;
-            return $result;
-        } catch (\Throwable $e) {
-            $wpdb->query($level === 0 ? 'ROLLBACK' : 'ROLLBACK TO SAVEPOINT ctai_' . $level);
-            self::$depth--;
-            throw $e;
-        }
+        $level=self::$depth++;
+        $wpdb->query($level===0?'START TRANSACTION':'SAVEPOINT ctai_'.$level);
+        try{
+            $result=$callback();
+            if($wpdb->query($level===0?'COMMIT':'RELEASE SAVEPOINT ctai_'.$level)===false)throw new \RuntimeException('Commit failed');
+        }catch(\Throwable $e){$wpdb->query($level===0?'ROLLBACK':'ROLLBACK TO SAVEPOINT ctai_'.$level);self::$depth--;throw $e;}
+        self::$depth--;
+        // Network failure cannot roll back a message that has already committed.
+        if($level===0){try{Realtime::flush();}catch(\Throwable $e){/* Durable jobs remain available to the worker. */}}
+        return $result;
     }
     public static function insert(string $table, array $data): int {
         global $wpdb;

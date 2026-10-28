@@ -1,7 +1,20 @@
 {
   "name": "crystaltap-ai-chatbox",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
-  "scripts": {"test": "node tests/push-worker.cjs && playwright test", "check": "node --check assets/chat-ui.js && node --check assets/app.js && node --check assets/widget.js && node --check mobile/sw.js"},
-  "devDependencies": {"@playwright/test": "1.56.1"}
+  "scripts": {
+    "test": "node --test tests/realtime-client.cjs && node tests/push-worker.cjs && playwright test",
+    "check": "node --check assets/chat-ui.js && node --check assets/app.js && node --check assets/widget.js && node --check mobile/sw.js && node --check assets/realtime.js && node --check assets/realtime-settings.js",
+    "build:realtime": "esbuild assets/realtime-client.js --bundle --minify --format=iife --target=es2020 --legal-comments=linked --outfile=assets/realtime.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "@playwright/test": "1.56.1",
+    "esbuild": "0.25.5",
+    "firebase": "13.1.0",
+    "firebase-tools": "15.34.1"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.6"
+  }
 }

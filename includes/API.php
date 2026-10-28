@@ -45,6 +45,10 @@ final class API {
             $response->header('Referrer-Policy','no-referrer');
             return $response;
         }, 'public');
+        self::route('/public/realtime','POST',static fn()=>Realtime::grant(true),'visitor');
+        self::route('/agent/realtime','POST',static fn()=>Realtime::grant(false));
+        self::route('/admin/realtime','GET,POST',static function($r){Native::secure();return $r->get_method()==='POST'?Realtime::save(self::input($r)):Realtime::config()+['status'=>Realtime::status(),'rules'=>Realtime::rules()];},'manage');
+        self::route('/admin/realtime/test','POST',static function(){Native::secure();return Realtime::test();},'manage');
         self::route('/native/link','POST',static function($r){$b=self::input($r);return Native::begin((string)($b['challenge']??''));},'public');
         self::route('/native/link/complete','POST',static function($r){$b=self::input($r);return Native::complete((string)($b['id']??''),(string)($b['verifier']??''));},'public');
         self::route('/agent/android-link/(?P<id>[a-f0-9]{48})','GET',static fn($r)=>Native::review($r['id']));

@@ -18,6 +18,10 @@ The app does not collect the WordPress password. The website issues a random dev
 
 Install app 0.1.2 over 0.1.0 or 0.1.1 without uninstalling. It retains the same signing identity and works with plugin 0.2.1. The inbox, chat composer, alerts, leads and profile now share native card layouts and bottom navigation. Existing browser approval, private notes, images, notification settings and background delivery remain supported. See [the UI preview and validation notes](ANDROID-UI.md).
 
+## Live foreground messages (0.3.0 / 0.1.4)
+
+Install plugin 0.3.0 and APK 0.1.4 for Firebase foreground listeners, reconnect recovery and regular-refresh fallback. Follow [Realtime setup](REALTIME.md); this is separate from FCM background notifications. Update over the installed app to preserve sign-in and preferences.
+
 ## Customer details and message previews (0.2.2 / 0.1.3)
 
 Install plugin 0.2.2 before APK 0.1.3. Clear your website/page cache after the plugin update so visitors receive the new required-name form. New chats require a name; email and phone are optional. Details are stored with the conversation, shown to assigned agents/supervisors, and included in privacy export/erasure. Existing chats remain usable without retroactive identity prompts. The app launcher and in-app mark use the supplied CrystalTap artwork on a white adaptive-icon background.
@@ -73,7 +77,7 @@ No new manifest/install/offline/push feature is served. The old manifest returns
 
 ## Signing and reproducible builds
 
-Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.3.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
+Run `python3 scripts/android_build.py --test`. Tool versions/checksums are pinned in `android/toolchain.json`; downloads use verified TLS and trusted enterprise CA configuration. The APK is `dist/CrystalTap-Agent-0.1.4.apk`, with a SHA-256 record in `dist/ANDROID-SHA256SUMS`.
 
 The build creates a local candidate signing identity in `.runtime/android-signing.jks` with its private password in `.runtime/android-signing.json`. Both are mode 0600 and ignored by Git. Back them up securely outside the checkout before replacing the environment. **Future APK updates must use the same signing key.** Do not publish those files or cache them in public CI artifacts. A fresh CI build creates a different candidate identity; its APK is a test artifact, not an update for an already distributed build. Google Play distribution needs its own account, policy review and release-signing plan.
 

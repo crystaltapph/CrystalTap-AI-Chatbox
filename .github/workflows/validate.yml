@@ -13,11 +13,13 @@ jobs:
       - run: python3 scripts/install.py
       - run: npx playwright install --with-deps chromium
       - run: python3 scripts/dev.py
+      - run: git diff --exit-code -- assets/realtime.js assets/realtime.js.LEGAL.txt
       - run: npm run check
       - run: docker compose exec -T wordpress sh -c 'find wp-content/plugins/crystaltap-ai-chatbox/includes -name "*.php" -exec php -l {} \;'
       - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/integration.php
       - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/customer.php
       - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/native.php
+      - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/realtime.php
       - run: python3 tests/concurrency.py
       - run: npm test
       - run: python3 scripts/release.py
@@ -33,3 +35,17 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 scripts/android_build.py --test
+
+  realtime-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --no-audit --no-fund
+      - run: npx firebase emulators:exec --config firebase.emulators.json --project demo-crystaltap-realtime --only database "node --test tests/realtime-rules.cjs"

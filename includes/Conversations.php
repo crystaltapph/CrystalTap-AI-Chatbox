@@ -95,7 +95,7 @@ final class Conversations {
         $data['generation'] = (int) $c['generation'] + 1;
         $data['updated_at'] = DB::now();
         if ($wpdb->update(DB::table('conversations'), $data, ['id' => $c['id']]) === false) { throw new \RuntimeException('State transition failed'); }
-        self::event((int) $c['id'], 'state');
+        self::event((int) $c['id'], 'state', (int)($c['assigned_agent']??0));
     }
     public static function handoff(int $id): array {
         return DB::transaction(function () use ($id) {
@@ -163,7 +163,7 @@ final class Conversations {
         }
         return $result;
     }
-    public static function event(int $id, string $type): void { DB::insert('events', ['conversation_id' => $id, 'type' => $type, 'created_at' => DB::now()]); }
+    public static function event(int $id, string $type, int $previousAgent=0): void { DB::insert('events', ['conversation_id' => $id, 'type' => $type, 'created_at' => DB::now()]);Realtime::changed($id,$type,$previousAgent); }
     public static function inbox(string $filter, int $page = 1, string $search = ''): array {
         global $wpdb;
         $uid = Auth::agent();

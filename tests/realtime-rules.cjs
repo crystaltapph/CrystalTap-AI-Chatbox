@@ -1,0 +1,23 @@
+const {test,before,after}=require('node:test');
+const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
+const {ref,set,get}=require('firebase/database');
+const fs=require('node:fs');
+let env;const site='a'.repeat(32),otherSite='b'.repeat(32),first='1'.repeat(64),second='2'.repeat(64),path=`ctai/${site}/${first}/signal`;
+const claims=(feed=first,scope=site,until=Date.now()+180000)=>({ctai_site:scope,ctai_feed:feed,ctai_until:until});
+before(async()=>{
+ env=await initializeTestEnvironment({projectId:'demo-crystaltap-realtime',database:{host:'127.0.0.1',port:9100,rules:fs.readFileSync('assets/firebase-database.rules.json','utf8')}});
+ await env.withSecurityRulesDisabled(async context=>set(ref(context.database(),`ctai/${site}`),{[first]:{signal:{change:'first',at:1},expires:Date.now()+10000},[second]:{signal:{change:'second',at:1},expires:Date.now()+10000}}));
+});
+after(async()=>{if(env)await env.cleanup();});
+test('anonymous clients cannot read an event',async()=>assertFails(get(ref(env.unauthenticatedContext().database(),path))));
+test('a valid lease reads only its own feed',async()=>{const db=env.authenticatedContext(first,claims()).database();const result=await assertSucceeds(get(ref(db,path)));if(result.val().change!=='first')throw new Error('Missing event');});
+test('another visitor or agent feed is denied',async()=>assertFails(get(ref(env.authenticatedContext(first,claims()).database(),`ctai/${site}/${second}/signal`))));
+test('another website namespace is denied',async()=>assertFails(get(ref(env.authenticatedContext(first,claims()).database(),`ctai/${otherSite}/${first}/signal`))));
+test('an authenticated client cannot list all feeds',async()=>assertFails(get(ref(env.authenticatedContext(first,claims()).database(),`ctai/${site}`))));
+test('an authenticated client cannot read the database root',async()=>assertFails(get(ref(env.authenticatedContext(first,claims()).database()))));
+test('a client cannot publish its own signals',async()=>assertFails(set(ref(env.authenticatedContext(first,claims()).database(),path),{change:'forged'})));
+test('a client cannot write to another feed',async()=>assertFails(set(ref(env.authenticatedContext(first,claims()).database(),`ctai/${site}/${second}/signal`),{change:'forged'})));
+test('an expired lease is denied even with a valid Firebase identity',async()=>assertFails(get(ref(env.authenticatedContext(first,claims(first,site,Date.now()-1000)).database(),path))));
+test('a missing WordPress lease is denied',async()=>assertFails(get(ref(env.authenticatedContext(first).database(),path))));
+test('a mismatched Firebase uid is denied',async()=>assertFails(get(ref(env.authenticatedContext(second,claims()).database(),path))));
+test('a forged site claim does not cross namespaces',async()=>assertFails(get(ref(env.authenticatedContext(first,claims(first,otherSite)).database(),path))));

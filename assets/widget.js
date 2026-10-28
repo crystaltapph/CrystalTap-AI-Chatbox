@@ -31,6 +31,7 @@
   if (cfg.logo) { const img = el('img'); img.src = cfg.logo; img.alt = ''; header.append(img); }
   const heading = el('div','ctai-heading'); heading.append(el('strong', '', cfg.bot_name));
   const status = el('div', 'ctai-status', cfg.ai_enabled ? 'AI and human support' : 'Customer support');status.setAttribute('role','status'); heading.append(status); header.append(heading);
+  let live=null,liveConnected=false,liveDirty=false,liveTimer;const liveStatus=el('small','ctai-live-status','');heading.append(liveStatus);
   const close = button('−', 'ctai-icon', () => toggle(false)); close.setAttribute('aria-label', 'Minimize chat');
   const headerActions=el('div','ctai-header-actions');
   const maximize=button('⤢','ctai-icon',()=>setExpanded(!expanded));maximize.setAttribute('aria-label','Maximize chat');maximize.title='Maximize chat';maximize.setAttribute('aria-expanded','false');
@@ -108,6 +109,9 @@
   const dock=el('div','ctai-composer-dock');dock.append(form,composerTools);
   panel.append(header, prechat, messages, channels, error, tools, peerTyping, thinking, dock); root.append(launcher, panel);
   ui.watchTyping(peerTyping,async()=>{const id=conversation?.id,epoch=conversationEpoch;const typing=!!(id&&!busy&&(await api(`public/conversations/${id}/typing`)).agent);if(epoch!==conversationEpoch||id!==conversation?.id)return false;agentTyping=typing;updateStatus();return typing;},()=>currentAgent()?.name||'Support agent');
+  function liveChange(){liveDirty=true;clearTimeout(liveTimer);if(!busy&&conversation&&open&&!document.hidden)liveTimer=setTimeout(async()=>{if(busy)return;liveDirty=false;try{await refresh();}catch(_){/* Normal polling surfaces connection/session errors. */}},80);}
+  function startLive(){if(live||!open||document.hidden||!initialized||!window.CTAILive)return;live=window.CTAILive.connect({grant:()=>api('public/realtime','POST',{}),change:liveChange,status:state=>{liveConnected=state==='live';liveStatus.textContent=state==='live'?'● Live':state==='polling'?'':state==='connecting'?'Connecting live updates…':'Regular refresh active';}});}
+  function stopLive(){live?.close();live=null;liveConnected=false;clearTimeout(liveTimer);liveStatus.textContent='';}
   async function api(path, method = 'GET', data) {
     const response = await fetch(boot.api + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-CTAI-CSRF': csrf }, body: data === undefined ? undefined : JSON.stringify(data) });
     const result = await response.json();
@@ -151,9 +155,9 @@
   }
   async function initialize() {
     if (initialized) return;
-    const data = await api('public/session'); Object.assign(cfg,data.config); renderChannels(); csrf = data.csrf; initialized = true; sessionExpired=false;
+    const reconnect=!!live;const data = await api('public/session');if(reconnect)stopLive();Object.assign(cfg,data.config); renderChannels(); csrf = data.csrf; initialized = true; sessionExpired=false;
     conversation = data.conversations.find(c => !['resolved', 'closed'].includes(c.status)) || data.conversations[0] || null;
-    customer=conversation?.customer||data.customer||null;fillCustomer();renderWelcome();updateStatus();
+    customer=conversation?.customer||data.customer||null;fillCustomer();renderWelcome();updateStatus();if(reconnect)startLive();
   }
   async function ensureConversation() { if(sessionExpired)throw new Error('Your chat session expired. Select New chat to continue.'); await initialize(); if (!conversation) { updateStatus(); prechat.elements.name.focus(); throw new Error('Enter your name and select Start chat.'); } }
   function currentAgent(){return agent&&String(agentFor)===String(conversation?.assigned_agent)?agent:null;}
@@ -200,16 +204,16 @@
     } while (batch.messages.length === 100);
     updateStatus(); messages.scrollTop = messages.scrollHeight;
   }
-  async function run(fn) { if (busy) return; busy = true; error.textContent = ''; updateStatus(); try { await fn(); } catch (e) { error.textContent = e.message; } finally { busy = false; updateStatus(); } }
+  async function run(fn) { if (busy) return; busy = true; error.textContent = ''; updateStatus(); try { await fn(); } catch (e) { error.textContent = e.message; } finally { busy = false; updateStatus();if(liveDirty)liveChange(); } }
   async function poll() {
     clearTimeout(timer);
     if (open && !document.hidden && !busy && navigator.onLine) { try { await refresh(); } catch (e) { error.textContent = e.message; } }
-    timer = setTimeout(poll, Math.max(3, +cfg.poll_seconds) * 1000);
+    timer = setTimeout(poll, liveConnected?15000:Math.max(3, +cfg.poll_seconds) * 1000);
   }
   function toggle(value) {
     open = value;if(!value){more.open=false;if(expanded)setExpanded(false);}updateViewport();panel.hidden = !value; launcher.hidden = value || embedded; launcher.setAttribute('aria-expanded', String(value));
-    if (value) { run(async () => { await initialize(); await refresh(); }).then(() => { if(conversation)input.focus();else prechat.elements.name.focus();poll(); }); }
-    else { clearTimeout(timer); launcher.focus(); }
+    if (value) { run(async () => { await initialize(); await refresh(); }).then(() => { if(conversation)input.focus();else prechat.elements.name.focus();startLive();poll(); }); }
+    else { clearTimeout(timer);stopLive();launcher.focus(); }
   }
   function showLead() {
     if (panel.querySelector('.ctai-lead')) return;
@@ -221,7 +225,7 @@
     panel.insertBefore(f, tools);
   }
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&open){if(expanded)setExpanded(false);else if(!embedded)toggle(false);}});
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && open) poll(); });
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopLive();else if(open){startLive();poll();}});window.addEventListener('pagehide',stopLive);
   window.addEventListener('online', () => { error.textContent = ''; updateStatus(); if (open) poll(); });
   window.addEventListener('offline', () => { error.textContent = 'You are offline. Your message has not been sent.'; updateStatus(); });
   panel.hidden = !open; launcher.hidden = open;

@@ -1,0 +1,23 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const vm=require('node:vm');
+const esbuild=require('esbuild');
+async function fixture(grant){
+ const names={app:['initializeApp','deleteApp'],auth:['initializeAuth','inMemoryPersistence','signInWithCustomToken','signOut'],database:['getDatabase','ref','onValue','goOffline']};
+ const result=await esbuild.build({entryPoints:['assets/realtime-client.js'],bundle:true,write:false,format:'cjs',plugins:[{name:'isolated-firebase',setup(b){b.onResolve({filter:/^firebase\//},a=>({path:a.path.split('/')[1],namespace:'test'}));b.onLoad({filter:/.*/,namespace:'test'},a=>({contents:names[a.path].map(n=>`export const ${n}=globalThis.sdk.${n};`).join('\n')}));}}]});
+ const watchers=new Map(),timers=new Map(),states=[],apps=[];let sequence=0,changes=0,grants=0;
+ const sdk={initializeApp:()=>{const app={id:apps.length};apps.push(app);return app;},deleteApp:async app=>{app.deleted=true;},initializeAuth:app=>({app}),inMemoryPersistence:{},signInWithCustomToken:async()=>{},signOut:async()=>{},getDatabase:app=>({app}),ref:(_,path)=>path,onValue:(path,data,cancel)=>{watchers.set(path,{data,cancel});return()=>watchers.delete(path);},goOffline:()=>{}};
+ const context={sdk,module:{exports:{}},exports:{},window:{},crypto:{randomUUID:()=>String(++sequence)},setTimeout:(fn,delay)=>{timers.set(++sequence,{fn,delay});return sequence;},clearTimeout:id=>timers.delete(id)};vm.runInNewContext(result.outputFiles[0].text,context);
+ const data={enabled:true,firebase:{projectId:'demo'},path:'ctai/own/feed/signal',token:'synthetic',renew_after:120};
+ const handle=context.window.CTAILive.connect({grant:async()=>{grants++;return grant?grant(grants,data):data;},change:()=>changes++,status:s=>states.push(s)});
+ const settle=async()=>{for(let i=0;i<15;i++)await Promise.resolve();};await settle();
+ return{handle,watchers,timers,states,apps,settle,get changes(){return changes;},get grants(){return grants;},emit:(p,v)=>watchers.get(p).data({val:()=>v}),async advance(delay){const entry=[...timers].find(([,t])=>t.delay===delay);assert.ok(entry,`Missing ${delay}ms retry`);timers.delete(entry[0]);entry[1].fn();await settle();}};
+}
+test('initial authorized read and changed signal refresh exactly once; duplicate snapshots do not',async()=>{const f=await fixture();f.emit('.info/connected',true);f.emit('ctai/own/feed/signal',{change:'one'});assert.equal(f.changes,1);assert.equal(f.states.at(-1),'live');f.emit('ctai/own/feed/signal',{change:'one'});assert.equal(f.changes,1);f.emit('ctai/own/feed/signal',{change:'two'});assert.equal(f.changes,2);f.handle.close();});
+test('reconnection catches up even if no new event value arrives',async()=>{const f=await fixture();f.emit('ctai/own/feed/signal',null);f.emit('.info/connected',true);const before=f.changes;f.emit('.info/connected',false);assert.equal(f.states.at(-1),'connecting');f.emit('.info/connected',true);assert.equal(f.changes,before+1);f.handle.close();});
+test('permission cancellation replaces the cancelled listener and retries safely',async()=>{const f=await fixture();f.watchers.get('ctai/own/feed/signal').cancel();await f.settle();assert.equal(f.states.at(-1),'fallback');assert.equal(f.watchers.size,0);await f.advance(10000);assert.equal(f.grants,2);assert.equal(f.watchers.size,2);f.handle.close();});
+test('lease renewal uses a fresh WordPress grant without duplicating listeners',async()=>{const f=await fixture();await f.advance(120000);assert.equal(f.grants,2);assert.equal(f.apps.length,1);assert.equal(f.watchers.size,2);f.handle.close();});
+test('revoked or disabled access detaches the active listener',async()=>{const f=await fixture((n,d)=>n===1?d:{enabled:false});await f.advance(120000);assert.equal(f.states.at(-1),'polling');assert.equal(f.watchers.size,0);assert.equal(f.apps[0].deleted,true);f.handle.close();});
+test('closing removes listeners and renewal timers',async()=>{const f=await fixture();f.handle.close();await f.settle();assert.equal(f.timers.size,0);assert.equal(f.watchers.size,0);assert.equal(f.apps[0].deleted,true);});
+test('a delayed credential response cannot reconnect a closed page',async()=>{let release;const pending=new Promise(r=>release=r);const f=await fixture(()=>pending);f.handle.close();release({enabled:true,firebase:{},path:'x',token:'synthetic'});await f.settle();assert.equal(f.apps.length,0);assert.equal(f.timers.size,0);});
+test('credential failures expose a generic fallback and retry',async()=>{const f=await fixture(()=>{throw Error('secret provider details');});assert.deepEqual(f.states,['fallback']);await f.advance(10000);assert.equal(f.grants,2);f.handle.close();});

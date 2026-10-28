@@ -35,6 +35,7 @@ final class Plugin {
             return $response;
         }, 10, 3);
         add_action('ctai_tick', [Notifications::class, 'tick']);
+        add_action('shutdown', [Realtime::class, 'shutdown'], PHP_INT_MAX);
         add_action('ctai_cleanup', [Privacy::class, 'cleanup']);
         add_filter('authenticate', static function ($result, $username, $password) {
             if (!$username || !$password) { return $result; }
@@ -79,14 +80,17 @@ final class Plugin {
     }
     private static function appAssets(): void {
         wp_enqueue_style('ctai-app', plugins_url('assets/app.css', CTAI_FILE), [], CTAI_VERSION);
+        wp_enqueue_script('ctai-realtime',plugins_url('assets/realtime.js',CTAI_FILE),[],CTAI_VERSION,true);
         wp_enqueue_script('ctai-chat-ui', plugins_url('assets/chat-ui.js', CTAI_FILE), [], CTAI_VERSION, true);
-        wp_enqueue_script('ctai-app', plugins_url('assets/app.js', CTAI_FILE), ['ctai-chat-ui'], CTAI_VERSION, true);
+        wp_enqueue_script('ctai-app', plugins_url('assets/app.js', CTAI_FILE), ['ctai-chat-ui','ctai-realtime','ctai-realtime-settings'], CTAI_VERSION, true);
+        wp_enqueue_script('ctai-realtime-settings',plugins_url('assets/realtime-settings.js',CTAI_FILE),[],CTAI_VERSION,true);
         wp_add_inline_script('ctai-app', 'window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';', 'before');
     }
     private static function widgetAssets(): void {
         wp_enqueue_style('ctai-widget', plugins_url('assets/widget.css', CTAI_FILE), [], CTAI_VERSION);
+        wp_enqueue_script('ctai-realtime',plugins_url('assets/realtime.js',CTAI_FILE),[],CTAI_VERSION,true);
         wp_enqueue_script('ctai-chat-ui', plugins_url('assets/chat-ui.js', CTAI_FILE), [], CTAI_VERSION, true);
-        wp_enqueue_script('ctai-widget', plugins_url('assets/widget.js', CTAI_FILE), ['ctai-chat-ui'], CTAI_VERSION, true);
+        wp_enqueue_script('ctai-widget', plugins_url('assets/widget.js', CTAI_FILE), ['ctai-chat-ui','ctai-realtime'], CTAI_VERSION, true);
         wp_add_inline_script('ctai-widget', 'window.CTAI_WIDGET=' . wp_json_encode(['api' => rest_url('crystaltap-ai/v1/'), 'config' => Settings::publicConfig(), 'autoGreeting' => Settings::get()['auto_greeting']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';', 'before');
     }
     public static function menus(): void {
@@ -112,7 +116,7 @@ final class Plugin {
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: same-origin');
-        echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#087f83"><title>CrystalTap Agent</title><link rel="stylesheet" href="' . esc_url(plugins_url('assets/app.css?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></head><body><div id="ctai-app" class="ctai-app ctai-mobile"></div><script>window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script><script src="' . esc_url(plugins_url('assets/chat-ui.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script><script src="' . esc_url(plugins_url('assets/app.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script></body></html>';
+        echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#087f83"><title>CrystalTap Agent</title><link rel="stylesheet" href="' . esc_url(plugins_url('assets/app.css?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></head><body><div id="ctai-app" class="ctai-app ctai-mobile"></div><script>window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script><script src="' . esc_url(plugins_url('assets/chat-ui.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script><script src="' . esc_url(plugins_url('assets/realtime.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script><script src="' . esc_url(plugins_url('assets/realtime-settings.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script><script src="' . esc_url(plugins_url('assets/app.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script></body></html>';
         exit;
     }
 }

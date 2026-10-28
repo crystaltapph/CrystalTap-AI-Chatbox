@@ -15,6 +15,7 @@ final class Privacy {
         });
     }
     public static function cleanup(): void {
+        Realtime::cleanup();
         global $wpdb;
         $wpdb->query($wpdb->prepare('DELETE FROM '.DB::table('native_links').' WHERE expires_at<%s',DB::now()));
         foreach($wpdb->get_results('SELECT * FROM '.DB::table('native_devices').' LIMIT 100',ARRAY_A)as$device){if(!Native::valid($device))Native::revoke((int)$device['id'],(int)$device['user_id']);}

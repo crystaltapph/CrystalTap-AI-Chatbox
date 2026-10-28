@@ -61,13 +61,14 @@ final class Notifications {
     public static function tick(): void {
         global $wpdb;
         $jobs = DB::table('jobs');
-        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $jobs WHERE available_at<=%s AND (locked_until IS NULL OR locked_until<%s) ORDER BY id LIMIT 10", DB::now(), DB::now()), ARRAY_A);
+        $rows = $wpdb->get_results($wpdb->prepare("SELECT * FROM $jobs WHERE available_at<=%s AND (locked_until IS NULL OR locked_until<%s) ORDER BY (type='realtime') ASC,id LIMIT 10", DB::now(), DB::now()), ARRAY_A);
         foreach ($rows as $job) {
             $claimed = $wpdb->query($wpdb->prepare("UPDATE $jobs SET locked_until=%s, attempts=attempts+1 WHERE id=%d AND (locked_until IS NULL OR locked_until<%s)", gmdate('Y-m-d H:i:s', time() + 120), $job['id'], DB::now()));
             if (!$claimed) { continue; }
             try {
                 $payload = json_decode($job['payload'], true) ?: [];
                 if ($job['type'] === 'push') { Push::deliver((int) $payload['notification']); }
+                if ($job['type'] === 'realtime') { Realtime::deliver($payload); }
                 if ($job['type'] === 'summary') { AI::summarize((int) $payload['conversation']); }
                 $wpdb->delete($jobs, ['id' => $job['id']]);
             } catch (\Throwable $e) {
