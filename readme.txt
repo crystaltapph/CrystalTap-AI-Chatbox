@@ -4,11 +4,11 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.1.5
+Stable tag: 0.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Standalone approved-knowledge AI chat, human support, and an installable agent workspace.
+Standalone approved-knowledge AI chat, human support, and a native Android agent app and browser workspace.
 
 == Description ==
 
@@ -24,9 +24,9 @@ OpenAI Responses API is optional until AI is enabled. Human support remains usab
 4. Configure a server-side CTAI_OPENAI_KEY or save an encrypted key under AI Configuration.
 5. Verify current model pricing, set budgets, test the connection, then enable AI.
 6. Assign WordPress users the CrystalTap Support Agent or Supervisor role.
-7. Under Settings generate VAPID keys and configure the contact subject.
+7. Under Settings upload matching Android Firebase client and service-account JSON files.
 8. Configure a real one-minute WordPress cron and private-response cache exclusions.
-9. Open /crystaltap-agent/ on HTTPS. Install on supported phones and register push by user action.
+9. Open /crystaltap-agent/ on HTTPS. Install the dedicated Android APK and approve sign-in through the browser workspace.
 
 == Shortcode ==
 
@@ -46,10 +46,13 @@ Use privacy tools and an approved retention policy. Deactivation/uninstall prese
 
 Single-site WordPress only. No offline sends. Image attachments require PHP GD and obey size/rate limits. Polling is not instant delivery.
 AI streaming is opt-in and depends on hosting/proxy buffering. Background summaries require a functioning scheduler.
-Browser/OS installation and push support vary. Physical-device testing is required before release.
+Native Android push needs Firebase configuration and Google Play services. Physical-device testing is required before release.
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.2.0 =
+Replace PWA/browser push with a native Android app, browser-approved device pairing, revocable encrypted sessions, Firebase HTTP-v1 alerts and a dedicated notification channel. Retire old worker/cache/install routes while preserving the browser dashboard and existing customer data.
 
 = 0.1.5 =
 Add a built-in/uploadable chat launcher icon, real customer/agent typing indicators, a basic emoji picker, safe clickable HTTP(S) links and private JPG/PNG/WebP chat attachments. Image messages go to human support; image bytes are not sent to OpenAI.

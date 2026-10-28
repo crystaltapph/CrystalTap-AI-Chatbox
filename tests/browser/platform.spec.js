@@ -56,7 +56,7 @@ test('WordPress agent takes over and replies to a visitor; notes stay private',a
   await page.getByRole('button',{name:'Resolve',exact:true}).click();
   await expect(page.locator('#ctai-chat-status')).toHaveText('resolved');await visitor.close();
 });
-test('mobile app, notification bell, content and settings render without script errors',async({page})=>{
+test('browser agent workspace, notification bell, content and settings render without script errors',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));await signIn(page);
   await page.setViewportSize({width:390,height:844});await page.goto('/crystaltap-agent/');
   await expect(page.getByRole('heading',{name:/Hello,/})).toBeVisible();
@@ -70,8 +70,8 @@ test('mobile app, notification bell, content and settings render without script 
   await expect(page.getByLabel('Approved content / description')).toBeVisible();
   await page.goto('/crystaltap-agent/#settings');await expect(page.getByRole('heading',{name:'Platform settings'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Environment health'})).toBeVisible();
-  const sw=await page.request.get('/crystaltap-agent/sw.js');expect(sw.status()).toBe(200);expect(sw.headers()['content-type']).toContain('javascript');
-  const manifest=await(await page.request.get('/crystaltap-agent/manifest.webmanifest')).json();expect(manifest.scope).toBe('http://localhost:8080/crystaltap-agent/');
+  const sw=await page.request.get('/crystaltap-agent/sw.js');expect(sw.status()).toBe(200);expect(sw.headers()['content-type']).toContain('javascript');expect(await sw.text()).not.toContain('showNotification');
+  const manifest=await page.request.get('/crystaltap-agent/manifest.webmanifest');expect(manifest.status()).toBe(410);await expect(page.locator('link[rel=manifest]')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 test('public SSE fallback completes cleanly and mutation CSRF is enforced',async({request})=>{
@@ -91,7 +91,7 @@ test('public SSE fallback completes cleanly and mutation CSRF is enforced',async
   }
 });
 
-test('profile separates push delivery checks and opt-in foreground sound',async({page})=>{
+test('browser profile shows Android controls and opt-in foreground sound',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(()=>{
     const Native=window.AudioContext;
@@ -103,7 +103,7 @@ test('profile separates push delivery checks and opt-in foreground sound',async(
   let id=100;
   await page.route('**/crystaltap-ai/v1/agent/notifications',r=>r.fulfill({json:{unread:1,items:[{id,read_at:null,title:'Test notification'}]}}));
   await signIn(page);await page.goto('/crystaltap-agent/#profile');
-  await expect(page.getByRole('heading',{name:'Push delivery checks'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'CrystalTap Android',exact:true})).toBeVisible();
   expect(await page.evaluate(()=>window.__tones)).toBe(0);
   await page.getByRole('button',{name:'Enable / test in-app sound',exact:true}).click();
   await expect(page.locator('#ctai-alert')).toContainText('Test chime played');
@@ -115,8 +115,7 @@ test('profile separates push delivery checks and opt-in foreground sound',async(
   await page.clock.runFor(6000);expect(await page.evaluate(()=>window.__tones)).toBe(4);
   await page.getByRole('button',{name:'Mute in-app sound',exact:true}).click();
   id=102;await page.clock.runFor(6000);expect(await page.evaluate(()=>window.__tones)).toBe(4);
-  await page.getByRole('button',{name:'Test push on this device',exact:true}).click();
-  await expect(page.locator('#ctai-alert')).toContainText('Enable push on this device first');
+  await expect(page.getByRole('button',{name:'Enable push on this device'})).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -209,19 +208,6 @@ test('expired visitor session can start a new chat without reloading the page',a
   await expect(page.locator('.ctai-customer')).toHaveText(/Fresh session works/);
 });
 
-test('an already-waiting app update stays visible while using the workspace',async({page})=>{
-  await page.addInitScript(()=>{
-    const worker={postMessage(){}};
-    Object.defineProperty(navigator,'serviceWorker',{configurable:true,value:{controller:{},register:async()=>({waiting:worker,installing:null,addEventListener(){}}),addEventListener(){}}});
-  });
-  await signIn(page);await page.goto('/crystaltap-agent/#profile');
-  await expect(page.getByRole('heading',{name:'Your workspace'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Apply update',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Mute in-app sound',exact:true}).click();
-  await expect(page.locator('#ctai-alert')).toHaveText('In-app sound muted.');
-  await expect(page.getByRole('button',{name:'Apply update',exact:true})).toBeVisible();
-});
-
 test('a delayed visitor history response cannot replace a new chat',async({page})=>{
   await page.goto('/chat-demo/');
   const input=page.getByRole('textbox',{name:'Message',exact:true});await input.fill('Old conversation marker');
@@ -309,4 +295,30 @@ test('uploaded launcher icon is saved and shown in the floating widget',async({p
   } finally {
     await visitor.close();await page.evaluate(async data=>{const b=window.CTAI_APP;const r=await fetch(b.api+'admin/settings',{method:'PUT',headers:{'Content-Type':'application/json','X-WP-Nonce':b.nonce},body:JSON.stringify(data)});if(!r.ok)throw new Error('Could not restore icon fixture');},{launcher_icon:old,auto_greeting:oldGreeting});
   }
+});
+
+test('Android sign-in is approved by a matching code in the browser',async({page,request})=>{
+  const crypto=require('node:crypto'),verifier=crypto.randomBytes(32).toString('hex'),challenge=crypto.createHash('sha256').update(verifier).digest('hex');
+  const started=await request.post('/wp-json/crystaltap-ai/v1/native/link',{data:{challenge}});expect(started.status()).toBe(200);const pair=await started.json();let access='';
+  try {
+    const pending=await request.post('/wp-json/crystaltap-ai/v1/native/link/complete',{data:{id:pair.id,verifier}});expect((await pending.json()).pending).toBe(true);
+    await signIn(page);await page.goto(pair.verification_url);await expect(page.locator('#ctai-android-link')).toContainText(pair.code);
+    await page.getByRole('button',{name:'Approve matching Android code',exact:true}).click();await expect(page.locator('#ctai-android-link')).toContainText('Android sign-in approved');
+    const complete=await request.post('/wp-json/crystaltap-ai/v1/native/link/complete',{data:{id:pair.id,verifier}});expect(complete.status()).toBe(200);access=(await complete.json()).token;
+    const inbox=await request.get('/wp-json/crystaltap-ai/v1/agent/conversations',{headers:{Authorization:'Bearer '+access}});expect(inbox.status()).toBe(200);
+    await page.goto('/crystaltap-agent/#profile');await expect(page.getByRole('heading',{name:'Android devices',exact:true})).toBeVisible();await expect(page.locator('#ctai-view')).toContainText('CrystalTap Android');
+    await expect(page.getByRole('button',{name:'Install app',exact:true})).toHaveCount(0);
+  } finally {if(access)await request.post('/wp-json/crystaltap-ai/v1/native/logout',{headers:{Authorization:'Bearer '+access},data:{}});}
+});
+
+
+test('PWA cleanup touches only the retired CrystalTap worker and caches',async({page})=>{
+  await page.addInitScript(()=>{
+    window.__retired={unsubscribed:false,own:false,other:false,deleted:[]};
+    Object.defineProperty(navigator,'serviceWorker',{configurable:true,value:{getRegistrations:async()=>[{scope:location.origin+'/crystaltap-agent/',pushManager:{getSubscription:async()=>({unsubscribe:async()=>{window.__retired.unsubscribed=true;}})},unregister:async()=>{window.__retired.own=true;}},{scope:location.origin+'/',unregister:async()=>{window.__retired.other=true;}}]}});
+    Object.defineProperty(window,'caches',{configurable:true,value:{keys:async()=>['ctai-shell-old','other-cache'],delete:async key=>window.__retired.deleted.push(key)}});
+  });
+  await signIn(page);await page.goto('/crystaltap-agent/#profile');
+  await expect.poll(()=>page.evaluate(()=>window.__retired.own)).toBe(true);
+  expect(await page.evaluate(()=>window.__retired)).toEqual({unsubscribed:true,own:true,other:false,deleted:['ctai-shell-old']});
 });

@@ -17,7 +17,7 @@ final class Settings {
         try { return Push::decrypt($stored[$name]); } catch (\Throwable $e) { return ''; }
     }
     public static function storeSecret(string $name, string $value): void {
-        if (!in_array($name, ['openai_key','vapid_private'], true)) { throw new Fault('Unsupported credential'); }
+        if (!in_array($name, ['openai_key','vapid_private','firebase_service','firebase_android'], true)) { throw new Fault('Unsupported credential'); }
         $stored = (array) get_option('ctai_secret_store', []);
         if ($value === '') { unset($stored[$name]); } else { $stored[$name] = Push::encrypt($value); }
         update_option('ctai_secret_store', $stored, false);

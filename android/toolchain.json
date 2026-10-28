@@ -1,0 +1,12 @@
+{
+  "gradle_version": "8.11.1",
+  "gradle_sha256": "f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6",
+  "sdk_url": "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip",
+  "sdk_checksum": "5fdcc763663eefb86a5b8879697aa6088b041e70",
+  "sdk_algorithm": "sha1",
+  "jdk": {
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jdk_x64_linux_hotspot_21.0.13_9.tar.gz",
+    "sha256": "d7f5d5cf865a2902b70ff549b97586a7d3f234e016f041ab447ea740c7d66d1c",
+    "version": "21.0.13+9"
+  }
+}

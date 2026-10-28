@@ -16,9 +16,19 @@ jobs:
       - run: npm run check
       - run: docker compose exec -T wordpress sh -c 'find wp-content/plugins/crystaltap-ai-chatbox/includes -name "*.php" -exec php -l {} \;'
       - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/integration.php
+      - run: docker compose run --rm cli wp eval-file wp-content/plugins/crystaltap-ai-chatbox/tests/native.php
       - run: python3 tests/concurrency.py
       - run: npm test
       - run: python3 scripts/release.py
       - run: python3 scripts/package_smoke.py
       - run: git archive --format=zip --prefix=CrystalTap-AI-Chatbox-main/ --output=dist/github-source.zip HEAD
       - run: python3 scripts/package_smoke.py --artifact dist/github-source.zip
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/android_build.py --test

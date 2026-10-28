@@ -16,6 +16,8 @@ final class Privacy {
     }
     public static function cleanup(): void {
         global $wpdb;
+        $wpdb->query($wpdb->prepare('DELETE FROM '.DB::table('native_links').' WHERE expires_at<%s',DB::now()));
+        foreach($wpdb->get_results('SELECT * FROM '.DB::table('native_devices').' LIMIT 100',ARRAY_A)as$device){if(!Native::valid($device))Native::revoke((int)$device['id'],(int)$device['user_id']);}
         $cutoff = gmdate('Y-m-d H:i:s', time() - Settings::get()['retention_days'] * DAY_IN_SECONDS);
         foreach ($wpdb->get_col($wpdb->prepare('SELECT id FROM ' . DB::table('conversations') . ' WHERE updated_at<%s LIMIT 100', $cutoff)) as $id) { self::eraseConversation((int) $id); }
         $wpdb->query($wpdb->prepare('DELETE s FROM ' . DB::table('sessions') . ' s LEFT JOIN ' . DB::table('conversations') . ' c ON c.session_id=s.id WHERE s.expires_at<%s AND c.id IS NULL', DB::now()));

@@ -6,13 +6,11 @@ import json
 import zipfile
 
 root=Path(__file__).resolve().parents[1]
-if not (root/'vendor/autoload.php').is_file():
-    raise SystemExit('Install locked Composer production dependencies before packaging.')
 out=root/'dist'
 out.mkdir(exist_ok=True)
-target=out/'crystaltap-ai-chatbox-0.1.5.zip'
+target=out/'crystaltap-ai-chatbox-0.2.0.zip'
 files=[root/p for p in ['crystaltap-ai-chatbox.php','uninstall.php','readme.txt','LICENSE','.htaccess']]
-for directory in ['includes','assets','mobile','vendor']:
+for directory in ['includes','assets','mobile']:
     for path in (root/directory).rglob('*'):
         relative=path.relative_to(root)
         if path.is_file() and not any(part.startswith('.') or part.lower() in ['tests','test','node_modules'] for part in relative.parts):

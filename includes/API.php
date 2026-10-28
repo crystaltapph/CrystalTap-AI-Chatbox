@@ -7,7 +7,7 @@ final class API {
     private static function route(string $path, string $methods, callable $callback, string $access = 'agent'): void {
         register_rest_route('crystaltap-ai/v1', $path, ['methods' => $methods, 'permission_callback' => static function (\WP_REST_Request $r) use ($access) {
             try {
-                Auth::origin();
+                Auth::origin(); Native::authenticate($r);
                 if ($access === 'public') { return true; }
                 if ($access === 'visitor') { Auth::visitor($r); return true; }
                 Auth::agent($access === 'manage' ? 'ctai_manage' : ($access === 'supervise' ? 'ctai_supervise' : 'ctai_agent'));
@@ -45,6 +45,17 @@ final class API {
             $response->header('Referrer-Policy','no-referrer');
             return $response;
         }, 'public');
+        self::route('/native/link','POST',static function($r){$b=self::input($r);return Native::begin((string)($b['challenge']??''));},'public');
+        self::route('/native/link/complete','POST',static function($r){$b=self::input($r);return Native::complete((string)($b['id']??''),(string)($b['verifier']??''));},'public');
+        self::route('/agent/android-link/(?P<id>[a-f0-9]{48})','GET',static fn($r)=>Native::review($r['id']));
+        self::route('/agent/android-link/(?P<id>[a-f0-9]{48})','POST',static function($r){$b=self::input($r);return Native::approve($r['id'],(string)($b['code']??''));});
+        self::route('/native/config','GET',static function(){Native::current();return ['firebase'=>NativePush::config()['client'],'push_configured'=>NativePush::status()['configured'],'user'=>Plugin::bootstrap()['user'],'site'=>untrailingslashit(home_url())];});
+        self::route('/native/device','PUT',static function($r){Auth::rate('android_registration',20,3600,(string)get_current_user_id());$b=self::input($r);return Native::register((string)($b['token']??''));});
+        self::route('/native/logout','POST',static fn()=>Native::revoke((int)Native::current()['id'],get_current_user_id()));
+        self::route('/native/push-test','POST',static function(){Auth::rate('android_test',3,60,(string)get_current_user_id());NativePush::send(Native::current(),0,true);return ['accepted'=>true,'message'=>'Firebase accepted the test. Check your phone; acceptance alone does not confirm receipt.'];});
+        self::route('/agent/native-devices','GET',static fn()=>Native::devices(get_current_user_id()));
+        self::route('/agent/native-devices/(?P<id>\d+)','DELETE',static fn($r)=>Native::revoke((int)$r['id'],get_current_user_id()));
+        self::route('/admin/firebase','POST',static function($r){Native::secure();return NativePush::save(self::input($r));},'manage');
         self::route('/public/session', 'GET', static function () {
             global $wpdb;
             $s = Auth::session(true);
@@ -134,19 +145,10 @@ final class API {
             }
             return $prefs;
         });
-        self::route('/agent/push-config', 'GET', static fn() => ['publicKey' => Settings::get()['vapid_public'], 'available' => Dependencies::pushStatus()['ready'] && (bool) Settings::secret('vapid_private')]);
-        self::route('/agent/push-status', 'GET', static fn() => Push::diagnostics(get_current_user_id()));
-        self::route('/agent/push-test', 'POST', static function ($r) {
-            Auth::rate('push_test', 3, 60, (string) get_current_user_id());
-            $b = self::input($r); $endpoint = $b['endpoint'] ?? '';
-            if (!is_string($endpoint) || !$endpoint || strlen($endpoint) > 2000) { throw new Fault('Enable push on this device before testing.'); }
-            return Push::test(get_current_user_id(), $endpoint);
-        });
-        self::route('/agent/devices', 'POST', static function ($r) { Auth::rate('devices', 10, 3600, (string) get_current_user_id()); return Push::register(get_current_user_id(), self::input($r)); });
-        self::route('/agent/devices', 'GET', static function () { global $wpdb; return $wpdb->get_results($wpdb->prepare('SELECT id,created_at FROM ' . DB::table('push_subscriptions') . ' WHERE user_id=%d ORDER BY id DESC', get_current_user_id()), ARRAY_A); });
-        self::route('/agent/devices/(?P<id>\d+)', 'DELETE', static function ($r) { global $wpdb; $wpdb->delete(DB::table('push_subscriptions'), ['id' => (int) $r['id'], 'user_id' => get_current_user_id()]); DB::audit('device_revoked', (int) $r['id']); return ['revoked' => true]; });
+        foreach(['/agent/push-config','/agent/push-status','/agent/push-test','/agent/devices','/admin/vapid-generate']as$path){self::route($path,'GET,POST',static function(){throw new Fault('Browser push is retired. Use the CrystalTap Android app.',410,'browser_push_retired');});}
         self::route('/agent/revoke-other-sessions', 'POST', static function () {
             global $wpdb; $uid = get_current_user_id();
+            if(Native::isNative()){throw new Fault('Manage WordPress browser sessions in the browser workspace.',409);}
             \WP_Session_Tokens::get_instance($uid)->destroy_others(wp_get_session_token());
             $wpdb->query($wpdb->prepare('DELETE FROM ' . DB::table('push_subscriptions') . ' WHERE user_id=%d AND session_hash<>%s', $uid, hash('sha256', wp_get_session_token())));
             DB::audit('other_sessions_revoked'); return ['revoked' => true];
@@ -175,24 +177,13 @@ final class API {
             return $result;
         }, 'supervise');
         self::route('/admin/health', 'GET', static function () {
-            $push = Dependencies::pushStatus();
-            return ['image_upload_ready'=>extension_loaded('gd') && function_exists('imagewebp'),'image_upload_limit_bytes'=>min(Images::MAX_BYTES,wp_max_upload_size()),'plugin_version' => CTAI_VERSION, 'plugin_directory' => basename(CTAI_DIR), 'https' => is_ssl(), 'openai_key_configured' => (bool) Settings::secret('openai_key'), 'vapid_private_configured' => (bool) Settings::secret('vapid_private'), 'push_library' => $push['sender_class'], 'push_vapid_class' => $push['vapid_class'], 'push_ready' => $push['ready'], 'push_diagnostic' => $push['issue'], 'push_missing_extensions' => implode(', ', $push['missing_extensions']) ?: 'None', 'last_worker' => (int) get_option('ctai_last_tick'), 'schema' => get_option('ctai_schema'), 'php' => PHP_VERSION, 'cron_note' => 'Configure a real cron every minute for timely notifications.'];
+            return ['image_upload_ready'=>extension_loaded('gd')&&function_exists('imagewebp'),'plugin_version'=>CTAI_VERSION,'https'=>is_ssl(),'openai_key_configured'=>(bool)Settings::secret('openai_key'),'android_push_configured'=>NativePush::status()['configured'],'android_openssl_ready'=>NativePush::status()['openssl'],'last_worker'=>(int)get_option('ctai_last_tick'),'cron_note'=>'Run WordPress cron every minute for timely Android alerts.'];
         }, 'manage');
         self::route('/admin/credentials', 'PUT', static function ($r) {
             if (!is_ssl() && !in_array(wp_parse_url(home_url(), PHP_URL_HOST), ['localhost','127.0.0.1'], true)) { throw new Fault('HTTPS is required', 403); }
             $b = self::input($r);
             if (array_key_exists('openai_key', $b)) { $key = (string) $b['openai_key']; if (strlen($key)>500 || preg_match('/[\s\x00-\x1f]/', $key)) { throw new Fault('Invalid API key format'); } Settings::storeSecret('openai_key', $key); }
             return ['saved' => true];
-        }, 'manage');
-        self::route('/admin/vapid-generate', 'POST', static function () {
-            if ((defined('CTAI_VAPID_PRIVATE') && constant('CTAI_VAPID_PRIVATE')) || getenv('CTAI_VAPID_PRIVATE')) { throw new Fault('The private VAPID key is configured externally. Configure its matching public key instead of generating a replacement.', 409); }
-            $push = Dependencies::pushStatus();
-            if (!$push['ready']) { throw new Fault($push['issue'], 503, 'push_dependencies'); }
-            $keys = \Minishlink\WebPush\VAPID::createVapidKeys();
-            Settings::storeSecret('vapid_private', $keys['privateKey']);
-            Settings::save(['vapid_public' => $keys['publicKey'], 'vapid_subject' => 'mailto:' . sanitize_email(get_option('admin_email'))]);
-            global $wpdb; $wpdb->query('DELETE FROM ' . DB::table('push_subscriptions'));
-            return ['generated' => true, 'public_key' => $keys['publicKey'], 'note' => 'Devices must register again after key rotation.'];
         }, 'manage');
         self::route('/admin/ai-test', 'POST', static function () {
             global $wpdb;

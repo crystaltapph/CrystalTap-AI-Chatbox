@@ -13,13 +13,8 @@ function req(string $method, string $path, array $body = []): WP_REST_Response {
 $result = 0;
 try {
     DB::migrate();
-    check(count($wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($prefix) . '%'))) === 18, '18 isolated plugin tables created');
+    check(count($wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($prefix) . '%'))) === 20, '20 isolated plugin tables created');
     DB::migrate(); check($wpdb->last_error === '', 'schema migration is repeatable');
-    $pushHealth=CrystalTap\Dependencies::pushStatus();
-    check($pushHealth['ready']&&$pushHealth['vapid_class']&&$pushHealth['sender_class'],'installed push dependency files, classes and extensions are ready');
-    $missingHealth=CrystalTap\Dependencies::pushStatus('/nonexistent-ctai-fixture/');
-    check(!$missingHealth['ready']&&count($missingHealth['missing_files'])===3,'missing push files produce a specific installation diagnosis');
-    check(!str_contains($missingHealth['issue'],'/nonexistent-ctai-fixture/'),'dependency errors omit absolute server paths');
     $admin = get_users(['role'=>'administrator','number'=>1])[0]->ID;
     foreach (['agent','other','supervisor'] as $name) {
         $u = wp_insert_user(['user_login'=>'ctai_test_'.$name.'_'.bin2hex(random_bytes(3)), 'user_pass'=>wp_generate_password(32), 'role'=>$name==='supervisor'?'ctai_supervisor':'ctai_agent']);
@@ -129,9 +124,7 @@ try {
     check(CrystalTap\Channels::links(['messenger_url'=>'javascript:alert(1)'])===[],'unsafe legacy contact settings remain hidden on read');
     Settings::save(['whatsapp_number'=>'','messenger_url'=>'','viber_number'=>'','viber_url'=>'']);
     check(Settings::publicConfig()['channels']===[],'blank contact settings hide all external buttons');
-    denied(fn()=>Push::validate(['endpoint'=>'https://127.0.0.1/private','keys'=>[]]),400,'push SSRF endpoint rejected');
-    denied(fn()=>Push::validate(['endpoint'=>'https://fcm.googleapis.com@127.0.0.1/private','keys'=>[]]),400,'push endpoint userinfo attack rejected');
-    check(Push::decrypt(Push::encrypt('subscription-secret'))==='subscription-secret','authenticated subscription encryption round trip');
+    check(Push::decrypt(Push::encrypt('subscription-secret'))==='subscription-secret','existing encrypted credentials remain compatible');
     // Background agents must keep queue alerts after browsers suspend their heartbeat.
     $wpdb->insert(DB::table('agent_profiles'), ['user_id'=>$users['other'],'availability'=>'online','heartbeat'=>gmdate('Y-m-d H:i:s',time()-600)]);
     Notifications::queue($id,'handoff','Sleeping phone test','sleeping-phone');
@@ -141,45 +134,6 @@ try {
     check(Notifications::listing($users['other'])['unread']===1,'explicitly offline agent is excluded from queue alerts');
     wp_clear_scheduled_hook('ctai_tick'); CrystalTap\Plugin::ensureSchedule(); $scheduled=wp_next_scheduled('ctai_tick'); CrystalTap\Plugin::ensureSchedule();
     check($scheduled&&wp_next_scheduled('ctai_tick')===$scheduled&&wp_get_schedule('ctai_tick')==='ctai_minute','missing worker event repairs itself without duplicating or postponing it');
-    wp_set_current_user(0);
-    check(req('GET','/agent/push-status')->get_status()===403&&req('POST','/agent/push-test',['endpoint'=>'https://fcm.googleapis.com/test'])->get_status()===403,'push diagnostics and test reject anonymous users');
-    wp_set_current_user($users['agent']);
-    denied(fn()=>Push::test($users['agent'],'https://fcm.googleapis.com/test'),403,'push test requires a valid signed-in device session');
-    $token=WP_Session_Tokens::get_instance($users['agent'])->create(time()+3600);
-    $_COOKIE[LOGGED_IN_COOKIE]=wp_generate_auth_cookie($users['agent'],time()+3600,'logged_in',$token);
-    $vapid=Minishlink\WebPush\VAPID::createVapidKeys();$device=Minishlink\WebPush\VAPID::createVapidKeys();
-    Settings::save(['vapid_public'=>$vapid['publicKey'],'vapid_subject'=>'mailto:fixture@example.invalid']); Settings::storeSecret('vapid_private',$vapid['privateKey']);
-    $sub=['endpoint'=>'https://fcm.googleapis.com/ctai-fixture','keys'=>['p256dh'=>$device['publicKey'],'auth'=>rtrim(strtr(base64_encode(random_bytes(16)),'+/','-_'),'=')]];
-    Push::register($users['agent'],$sub);
-    $diagnostic=Push::diagnostics($users['agent']);
-    check($diagnostic['this_session_registered']&&$diagnostic['worker_scheduled'],'delivery checks find current device and scheduled worker');
-    check(!str_contains(wp_json_encode($diagnostic),$sub['endpoint'])&&!str_contains(wp_json_encode($diagnostic),$vapid['privateKey']),'delivery checks expose no endpoints or VAPID secrets');
-    denied(fn()=>Push::test($users['other'],$sub['endpoint']),403,'push test cannot target another user with the current session');
-    denied(fn()=>Push::test($users['agent'],'https://fcm.googleapis.com/other-device'),409,'push test cannot target an unregistered endpoint');
-    $mock=new GuzzleHttp\Handler\MockHandler([new GuzzleHttp\Psr7\Response(201),new GuzzleHttp\Psr7\Response(403,[],'PRIVATE_PUSH_PROVIDER_DETAILS'),new GuzzleHttp\Psr7\Response(410)]);
-    $history=[];$stack=GuzzleHttp\HandlerStack::create($mock);$stack->push(GuzzleHttp\Middleware::history($history));
-    $transport=static fn()=>['handler'=>$stack]; add_filter('ctai_push_client_options',$transport);
-    try {
-        check(Push::test($users['agent'],$sub['endpoint'])['accepted'],'push test encrypts and sends a notification to the registered device');
-        check(count($history)===1&&$history[0]['request']->hasHeader('Authorization')&&!str_contains((string)$history[0]['request']->getBody(),'ctai-test'),'real Web Push transport signs and encrypts test payload');
-        try {Push::test($users['agent'],$sub['endpoint']);throw new RuntimeException('Expected push rejection');}
-        catch(Fault $e){check($e->slug==='push_authentication'&&!str_contains($e->getMessage(),'PRIVATE_PUSH_PROVIDER_DETAILS'),'provider authentication failure is actionable and redacted');}
-        denied(fn()=>Push::test($users['agent'],$sub['endpoint']),409,'expired push subscription produces registration guidance');
-        check(!Push::diagnostics($users['agent'])['this_session_registered'],'expired subscription is removed');
-        Push::register($users['agent'],$sub);
-        $mock->append(new GuzzleHttp\Psr7\Response(201),new GuzzleHttp\Psr7\Response(201),new GuzzleHttp\Psr7\Response(201));
-        for($i=0;$i<3;$i++)check(req('POST','/agent/push-test',['endpoint'=>$sub['endpoint']])->get_status()===200,'authorized push test API succeeds within limit');
-        check(req('POST','/agent/push-test',['endpoint'=>$sub['endpoint']])->get_status()===429,'push test rate limit prevents repeated sends');
-        $wpdb->query('DELETE FROM '.DB::table('jobs'));
-        Notifications::emit($users['agent'],'worker-push-test',$id,'message','Worker test');
-        $mock->append(new GuzzleHttp\Psr7\Response(201)); $before=count($history);
-        Notifications::tick();
-        check(count($history)===$before+1&&(int)$wpdb->get_var('SELECT COUNT(*) FROM '.DB::table('jobs'))===0,'background worker sends eligible alerts using the same encrypted transport');
-        check(Push::diagnostics($users['agent'])['worker_last_run_seconds_ago']<5,'worker diagnostics update after processing');
-        $wpdb->query($wpdb->prepare('UPDATE '.DB::table('agent_profiles').' SET preferences=%s WHERE user_id=%d',wp_json_encode(['push'=>false]),$users['agent']));
-        Notifications::emit($users['agent'],'worker-muted-test',$id,'message','Muted test');Notifications::tick();
-        check(count($history)===$before+1,'automatic push respects muted preferences');
-    } finally {remove_filter('ctai_push_client_options',$transport);unset($_COOKIE[LOGGED_IN_COOKIE]);}
     $decoder = new CrystalTap\ResponseStream(); $deltas = [];
     $wire = 'data: '.wp_json_encode(['type'=>'response.output_text.delta','delta'=>'{"answer":"Hello \\u006dundo","product_ids":[],"needs_human":false}'])."\r\n\r\n";
     $wire .= 'data: '.wp_json_encode(['type'=>'response.completed','response'=>['status'=>'completed']])."\r\n\r\n";

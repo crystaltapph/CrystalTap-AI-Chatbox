@@ -1,21 +1,5 @@
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const listeners = {}, shown = [], opened = [];
-const context = {
-  CTAI_VERSION:'fixture',CTAI_ASSETS:'https://example.invalid/assets/',URL,
-  self:{addEventListener:(type,fn)=>{listeners[type]=fn;},registration:{scope:'https://example.invalid/crystaltap-agent/',showNotification:async(title,options)=>{shown.push({title,...options});}},clients:{matchAll:async()=>[],openWindow:async url=>{opened.push(url);}}}
-};
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const handlers={},deleted=[];let unregistered=false,skipped=false;
+const context={caches:{keys:async()=>['ctai-shell-0.1.5','other-site-cache'],delete:async key=>deleted.push(key)},self:{addEventListener:(type,fn)=>handlers[type]=fn,skipWaiting:async()=>{skipped=true;},registration:{unregister:async()=>{unregistered=true;}}}};
 vm.runInNewContext(fs.readFileSync('mobile/sw.js','utf8'),context);
-(async()=>{
-  let pending;
-  listeners.push({data:{json:()=>({tag:'ctai-1',conversation:17,body:'PRIVATE CUSTOMER MESSAGE'})},waitUntil:p=>{pending=p;}});await pending;
-  assert.equal(shown[0].body,'A support conversation needs your attention.');
-  assert.equal(shown[0].silent,false);
-  assert.equal(JSON.stringify(shown).includes('PRIVATE CUSTOMER MESSAGE'),false);
-  listeners.push({data:{json:()=>({test:true,conversation:0,tag:'ctai-test'})},waitUntil:p=>{pending=p;}});await pending;
-  assert.match(shown[1].body,/Push reached this device/);
-  listeners.notificationclick({notification:{close(){},data:shown[0].data},waitUntil:p=>{pending=p;}});await pending;
-  assert.equal(opened[0],'https://example.invalid/crystaltap-agent/#conversation/17');
-  console.log('5 service-worker checks passed. Physical phone delivery and sound are not simulated.');
-})().catch(error=>{console.error(error);process.exitCode=1;});
+(async()=>{let pending;handlers.install({waitUntil:p=>pending=p});await pending;handlers.activate({waitUntil:p=>pending=p});await pending;assert.equal(skipped,true);assert.equal(unregistered,true);assert.deepEqual(deleted,['ctai-shell-0.1.5']);assert.equal(handlers.push,undefined);assert.equal(handlers.fetch,undefined);console.log('5 PWA retirement checks passed.');})().catch(e=>{console.error(e);process.exitCode=1;});

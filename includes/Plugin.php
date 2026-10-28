@@ -31,12 +31,11 @@ final class Plugin {
         add_action('init', static function () { if (get_option('ctai_schema') !== CTAI_VERSION) { DB::migrate(); } });
         add_action('rest_api_init', [API::class, 'register']);
         add_filter('rest_post_dispatch', static function ($response, $server, $request) {
-            if (str_starts_with($request->get_route(), '/crystaltap-ai/v1/')) { $response->header('Cache-Control', 'no-store, private, max-age=0'); $response->header('Vary', 'Cookie, Origin'); }
+            if (str_starts_with($request->get_route(), '/crystaltap-ai/v1/')) { $response->header('Cache-Control', 'no-store, private, max-age=0'); $response->header('Vary', 'Cookie, Origin, Authorization'); }
             return $response;
         }, 10, 3);
         add_action('ctai_tick', [Notifications::class, 'tick']);
         add_action('ctai_cleanup', [Privacy::class, 'cleanup']);
-        add_action('clear_auth_cookie', [Push::class, 'logout']);
         add_filter('authenticate', static function ($result, $username, $password) {
             if (!$username || !$password) { return $result; }
             $user = get_user_by('login', $username) ?: get_user_by('email', $username);
@@ -104,22 +103,16 @@ final class Plugin {
         $path = trim((string) ($GLOBALS['wp']->request ?? ''), '/');
         $route = substr($path, strlen('crystaltap-agent'));
         if ($route === '/sw.js') {
-            nocache_headers(); header('Content-Type: application/javascript; charset=utf-8');
-            $assets = plugins_url('assets/', CTAI_FILE);
-            echo 'const CTAI_VERSION=' . wp_json_encode(CTAI_VERSION) . ';const CTAI_ASSETS=' . wp_json_encode($assets) . ';';
-            readfile(CTAI_DIR . 'mobile/sw.js'); exit;
+            nocache_headers();header('Content-Type: application/javascript; charset=utf-8');readfile(CTAI_DIR.'mobile/sw.js');exit;
         }
-        if ($route === '/manifest.webmanifest') {
-            header('Content-Type: application/manifest+json; charset=utf-8');
-            echo wp_json_encode(['id' => home_url('/crystaltap-agent/'), 'name' => 'CrystalTap Agent', 'short_name' => 'CrystalTap', 'start_url' => home_url('/crystaltap-agent/'), 'scope' => home_url('/crystaltap-agent/'), 'display' => 'standalone', 'theme_color' => '#087f83', 'background_color' => '#f4f8f9', 'icons' => [['src' => plugins_url('assets/icon-192.png', CTAI_FILE), 'sizes' => '192x192', 'type' => 'image/png'], ['src' => plugins_url('assets/icon-512.png', CTAI_FILE), 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any maskable']]]); exit;
-        }
+        if ($route === '/manifest.webmanifest') {status_header(410);nocache_headers();header('Content-Type: application/json');echo wp_json_encode(['retired'=>true]);exit;}
         if (!is_user_logged_in()) { auth_redirect(); }
         if (!current_user_can('ctai_agent')) { wp_die('This account does not have CrystalTap Agent access.', 'Access denied', ['response' => 403]); }
         nocache_headers();
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: same-origin');
-        echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#087f83"><meta name="apple-mobile-web-app-capable" content="yes"><title>CrystalTap Agent</title><link rel="manifest" href="' . esc_url(home_url('/crystaltap-agent/manifest.webmanifest')) . '"><link rel="apple-touch-icon" href="' . esc_url(plugins_url('assets/icon-192.png', CTAI_FILE)) . '"><link rel="stylesheet" href="' . esc_url(plugins_url('assets/app.css?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></head><body><div id="ctai-app" class="ctai-app ctai-mobile"></div><script>window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script><script src="' . esc_url(plugins_url('assets/chat-ui.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script><script src="' . esc_url(plugins_url('assets/app.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script></body></html>';
+        echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#087f83"><title>CrystalTap Agent</title><link rel="stylesheet" href="' . esc_url(plugins_url('assets/app.css?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></head><body><div id="ctai-app" class="ctai-app ctai-mobile"></div><script>window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script><script src="' . esc_url(plugins_url('assets/chat-ui.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script><script src="' . esc_url(plugins_url('assets/app.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script></body></html>';
         exit;
     }
 }
