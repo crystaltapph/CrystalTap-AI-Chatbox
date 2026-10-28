@@ -9,7 +9,7 @@
   window.ctaiWidgetMounted = true;
   roots.filter(r => r !== root).forEach(r => r.remove());
   const embedded = root.dataset.ctaiMode === 'embedded';
-  const cfg = boot.config;
+  const cfg = boot.config, ui = window.CTAIChatUI;
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
   const button = (text, cls, fn) => { const n = el('button', cls, text); n.type = 'button'; n.addEventListener('click', fn); return n; };
   root.className = `ctai-widget ${embedded ? 'ctai-embedded' : 'ctai-floating'} ctai-${cfg.position}`;
@@ -20,6 +20,10 @@
   root.style.setProperty('--ctai-height', `${cfg.height}px`);
   let open = embedded, csrf = '', conversation = null, lastSeq = 0, timer, pending = null, busy = false, initialized = false, conversationEpoch = 0, sessionExpired = false;
   const launcher = button('Chat with CrystalTap', 'ctai-launcher', () => toggle(true));
+  const launcherText=el('span','ctai-launcher-text','Chat with CrystalTap');launcher.replaceChildren();
+  const launcherIcon=cfg.launcher_icon?el('img','ctai-launcher-image'):el('span','ctai-launcher-symbol','💬');
+  if(cfg.launcher_icon){launcherIcon.src=cfg.launcher_icon;launcherIcon.alt='';}else launcherIcon.setAttribute('aria-hidden','true');
+  launcher.append(launcherIcon,launcherText);launcher.setAttribute('aria-label','Chat with CrystalTap');
   launcher.setAttribute('aria-expanded', 'false');
   launcher.setAttribute('aria-controls', 'ctai-chat-panel');
   const panel = el('section', 'ctai-panel'); panel.id = 'ctai-chat-panel'; panel.setAttribute('aria-label', 'CrystalTap customer support');
@@ -54,26 +58,32 @@
   }
   renderChannels();
   const tools = el('div', 'ctai-tools');
-  tools.append(button('Talk to a person', '', async () => run(async () => { await ensureConversation(); conversation = await api(`public/conversations/${conversation.id}/handoff`, 'POST', {}); updateStatus(); error.textContent = 'Your request is in the support queue. An agent will respond when available.'; })), button('Leave contact details', '', () => showLead()), button('New chat', '', async () => run(async () => { if (!confirm('Start a new conversation? Your existing history follows the retention policy.')) return; await initialize(); conversationEpoch++; conversation = await api('public/conversations', 'POST', {}); sessionExpired = false; lastSeq = 0; messages.replaceChildren(el('div', 'ctai-bubble ctai-ai', cfg.welcome)); pending = null; input.value = ''; updateStatus(); })));
+  tools.append(button('Talk to a person', '', async () => run(async () => { await ensureConversation(); conversation = await api(`public/conversations/${conversation.id}/handoff`, 'POST', {}); updateStatus(); error.textContent = 'Your request is in the support queue. An agent will respond when available.'; })), button('Leave contact details', '', () => showLead()), button('New chat', '', async () => run(async () => { if (!confirm('Start a new conversation? Your existing history follows the retention policy.')) return; await initialize(); conversationEpoch++; conversation = await api('public/conversations', 'POST', {}); sessionExpired = false; lastSeq = 0; messages.replaceChildren(el('div', 'ctai-bubble ctai-ai', cfg.welcome)); pending = null; input.value = ''; attachments.clear();attachments.stop();updateStatus(); })));
   const form = el('form', 'ctai-composer');
   const input = el('textarea'); input.rows = 1; input.maxLength = 4000; input.placeholder = 'Type your question…'; input.setAttribute('aria-label', 'Message');
   const send = el('button', 'ctai-send', 'Send'); send.type = 'submit';
   form.append(input, send);
+  const composerTools=el('div','ctai-composer-controls');
+  const attachments=ui.composer(input,composerTools,{typing:active=>conversation?api(`public/conversations/${conversation.id}/typing`,'POST',{active}):null,upload:async(file,key)=>{await ensureConversation();const body=new FormData();body.append('image',file);body.append('key',key);const response=await fetch(boot.api+`public/conversations/${conversation.id}/images`,{method:'POST',credentials:'same-origin',headers:{'X-CTAI-CSRF':csrf},body});const result=await response.json();if(!response.ok)throw requestError(result);return result;}});
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
+  const peerTyping=el('div','ctai-peer-typing');peerTyping.setAttribute('role','status');
   const thinking = el('div', 'ctai-thinking'); thinking.setAttribute('role', 'status');
   form.addEventListener('submit', async e => {
-    e.preventDefault(); if (busy || !input.value.trim() || !navigator.onLine) return;
+    e.preventDefault(); if (busy || (!input.value.trim()&&!attachments.hasImages()) || !navigator.onLine) return;
     await run(async () => {
       await ensureConversation();
-      if (!pending || pending.content !== input.value.trim()) pending = { key: crypto.randomUUID(), content: input.value.trim() };
-      thinking.textContent = 'Sending your message…';
+      const ids=await attachments.upload();
+      if (!pending || pending.content !== input.value.trim() || JSON.stringify(pending.attachments)!==JSON.stringify(ids)) pending = { key: crypto.randomUUID(), content: input.value.trim(), attachments:ids };
+      attachments.stop();
+      thinking.textContent = conversation.status==='ai_active'&&!ids.length ? 'AI assistant is thinking…' : 'Sending your message…';thinking.classList.add('is-typing');
       const sent = cfg.streaming_enabled && window.ReadableStream ? await streamMessage(pending) : await api(`public/conversations/${conversation.id}/messages`, 'POST', pending);
-      conversation = sent.conversation; input.value = ''; pending = null;
+      conversation = sent.conversation; input.value = ''; pending = null; attachments.clear();
       await refresh();
     });
-    thinking.textContent = '';
+    thinking.textContent = '';thinking.classList.remove('is-typing');
   });
-  panel.append(header, messages, notice, channels, error, tools, thinking, form); root.append(launcher, panel);
+  panel.append(header, messages, notice, channels, error, tools, peerTyping, thinking, composerTools, form); root.append(launcher, panel);
+  ui.watchTyping(peerTyping,async()=>conversation&&!busy?(await api(`public/conversations/${conversation.id}/typing`)).agent:false,'Support agent');
   async function api(path, method = 'GET', data) {
     const response = await fetch(boot.api + path, { method, credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'X-CTAI-CSRF': csrf }, body: data === undefined ? undefined : JSON.stringify(data) });
     const result = await response.json();
@@ -126,13 +136,14 @@
     const labels = { ai_active: 'AI assistance', human_requested: 'Requesting human support', waiting: 'Waiting for an agent', assigned: 'An agent is joining', human_active: 'Human support', resolved: 'Conversation resolved', closed: 'Conversation closed' };
     status.textContent = conversation ? labels[conversation.status] || 'Support' : 'AI and human support';
     const ended = conversation && ['resolved','closed'].includes(conversation.status);
+    attachments.lock(busy||sessionExpired||!!ended||!navigator.onLine);
     input.disabled = sessionExpired || !!ended || busy || !navigator.onLine; send.disabled = input.disabled;
     input.placeholder = ended ? 'Start a new chat to continue' : 'Type your question…';
   }
   function appendMessage(m) {
     const bubble = el('article', `ctai-bubble ctai-${m.sender}`);
     const label = {customer: 'You', ai: cfg.bot_name, agent: 'CrystalTap support', system: 'Support update'}[m.sender] || 'Support';
-    bubble.append(el('small', 'ctai-sender', label), el('div', '', m.content));
+    const body=el('div');ui.text(body,m.content);bubble.append(el('small', 'ctai-sender', label),body);ui.images(bubble,m.attachments,{api:boot.api});
     for (const p of m.products || []) {
       const card = el('div', 'ctai-product'); card.append(el('strong', '', p.title));
       const d = p.details || {};
@@ -152,7 +163,7 @@
     do {
       batch = await api(`public/conversations/${id}/messages?after=${lastSeq}`);
       if (epoch !== conversationEpoch || +conversation?.id !== +id) return;
-      conversation = batch.conversation;
+      conversation = batch.conversation;ui.typing(peerTyping,batch.typing?.agent,'Support agent');
       for (const m of batch.messages) { if (+m.seq > lastSeq) { appendMessage(m); lastSeq = +m.seq; } }
     } while (batch.messages.length === 100);
     updateStatus(); messages.scrollTop = messages.scrollHeight;
@@ -183,5 +194,5 @@
   window.addEventListener('offline', () => { error.textContent = 'You are offline. Your message has not been sent.'; updateStatus(); });
   panel.hidden = !open; launcher.hidden = open;
   if (embedded) toggle(true);
-  else if (boot.autoGreeting) { launcher.textContent = cfg.welcome; }
+  else if (boot.autoGreeting) { launcherText.textContent = cfg.welcome; }
 })();

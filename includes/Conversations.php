@@ -28,7 +28,7 @@ final class Conversations {
         $table = DB::table('messages');
         $old = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE conversation_id=%d AND client_key=%s", $conversation['id'], $key), ARRAY_A);
         if ($old) {
-            if ($old['content'] !== $text || $old['sender'] !== $sender || ($old['visibility'] === 'internal') !== $internal || ($sender === 'agent' && (int) $old['user_id'] !== get_current_user_id())) { throw new Fault('Idempotency key already used for a different message', 409); }
+            if ((json_decode($old['metadata'] ?: '{}',true)['attachment_ids'] ?? []) !== ($metadata['attachment_ids'] ?? []) || $old['content'] !== $text || $old['sender'] !== $sender || ($old['visibility'] === 'internal') !== $internal || ($sender === 'agent' && (int) $old['user_id'] !== get_current_user_id())) { throw new Fault('Idempotency key already used for a different message', 409); }
             $old['duplicate'] = true;
             return $old;
         }
@@ -41,36 +41,42 @@ final class Conversations {
         }
         return $wpdb->get_row($wpdb->prepare("SELECT * FROM $table WHERE id=%d", $id), ARRAY_A);
     }
-    public static function customer(int $id, string $text, string $key, ?callable $delta = null): array {
+    public static function customer(int $id, string $text, string $key, ?callable $delta = null, array $attachments = []): array {
         global $wpdb;
         Auth::rate('messages', 20, 60);
-        $result = DB::transaction(function () use ($id, $text, $key, $wpdb) {
+        $result = DB::transaction(function () use ($id, $text, $key, $wpdb, $attachments) {
             $c = self::get($id, true);
             if (in_array($c['status'], ['resolved','closed'], true)) { throw new Fault('Start a new conversation or ask an agent to reopen this one', 409); }
             $wpdb->get_var($wpdb->prepare('SELECT id FROM ' . DB::table('sessions') . ' WHERE id=%d FOR UPDATE', $c['session_id']));
             $count = (int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . DB::table('messages') . ' m INNER JOIN ' . DB::table('conversations') . ' c ON c.id=m.conversation_id WHERE c.session_id=%d AND m.sender=%s', $c['session_id'], 'customer'));
             $existing = $wpdb->get_var($wpdb->prepare('SELECT id FROM ' . DB::table('messages') . ' WHERE conversation_id=%d AND client_key=%s', $id, 'visitor-' . $key));
             if (!$existing && $count >= Settings::get()['session_limit']) { throw new Fault('Conversation message limit reached. Please contact support.', 429); }
-            $message = self::message($c, 'customer', $text, 'visitor-' . $key);
+            $message = self::message($c, 'customer', $text, 'visitor-' . $key, false, ['attachment_ids'=>Images::ids($attachments)]);
+            Images::bind($attachments,$c,(int)$message['id'],['kind'=>'visitor','id'=>(int)$c['session_id']]);
+            $wpdb->update(DB::table('conversations'),['visitor_typing_until'=>null],['id'=>$id]);
             if (empty($message['duplicate'])) { $wpdb->query($wpdb->prepare('UPDATE ' . DB::table('conversations') . ' SET generation=generation+1 WHERE id=%d', $id)); }
             $message['_generation'] = (int) $c['generation'] + 1;
             return $message;
         });
-        if (empty($result['duplicate']) && self::get($id)['status'] === 'ai_active') { AI::reply($id, (int) $result['id'], (int) $result['_generation'], $delta); }
+        if ($attachments && empty($result['duplicate']) && self::get($id)['status'] === 'ai_active') { self::handoff($id); }
+        if (!$attachments && empty($result['duplicate']) && self::get($id)['status'] === 'ai_active') { AI::reply($id, (int) $result['id'], (int) $result['_generation'], $delta); }
         return ['accepted' => true, 'message' => self::publicMessage($result), 'conversation' => self::view(self::get($id))];
     }
-    public static function agentMessage(int $id, string $text, string $key, bool $internal): array {
-        return DB::transaction(function () use ($id, $text, $key, $internal) {
+    public static function agentMessage(int $id, string $text, string $key, bool $internal, array $attachments = []): array {
+        return DB::transaction(function () use ($id, $text, $key, $internal, $attachments) {
             $c = self::get($id, true);
             Auth::scope($c);
             if (!$internal && !in_array($c['status'], ['assigned','human_active'], true)) { throw new Fault('Take over this conversation before replying', 409); }
-            $message = self::message($c, 'agent', $text, 'agent-' . $key, $internal);
+            $message = self::message($c, 'agent', $text, 'agent-' . $key, $internal, ['attachment_ids'=>Images::ids($attachments)]);
+            Images::bind($attachments,$c,(int)$message['id'],['kind'=>'agent','id'=>get_current_user_id()]);
+            global $wpdb; $wpdb->update(DB::table('conversations'),['agent_typing_until'=>null],['id'=>$id]);
             if (!$internal && $c['status'] === 'assigned') { self::update($c, ['status' => 'human_active']); }
             return self::publicMessage($message, true);
         });
     }
     public static function update(array $c, array $data): void {
         global $wpdb;
+        $data['agent_typing_until'] = null; $data['visitor_typing_until'] = null;
         $data['version'] = (int) $c['version'] + 1;
         $data['generation'] = (int) $c['generation'] + 1;
         $data['updated_at'] = DB::now();
@@ -135,6 +141,7 @@ final class Conversations {
     public static function publicMessage(array $m, bool $agent = false): array {
         $result = array_intersect_key($m, array_flip(['id','seq','sender','content','created_at','visibility']));
         $metadata = json_decode($m['metadata'] ?? '{}', true) ?: [];
+        $result['attachments'] = Images::forMessage((int)$m['id']);
         $result['products'] = [];
         foreach (array_slice($metadata['product_ids'] ?? [], 0, 3) as $id) {
             $product = Content::product((int) $id);

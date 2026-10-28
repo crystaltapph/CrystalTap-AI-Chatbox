@@ -13,7 +13,7 @@ function req(string $method, string $path, array $body = []): WP_REST_Response {
 $result = 0;
 try {
     DB::migrate();
-    check(count($wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($prefix) . '%'))) === 17, '17 isolated plugin tables created');
+    check(count($wpdb->get_col($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($prefix) . '%'))) === 18, '18 isolated plugin tables created');
     DB::migrate(); check($wpdb->last_error === '', 'schema migration is repeatable');
     $pushHealth=CrystalTap\Dependencies::pushStatus();
     check($pushHealth['ready']&&$pushHealth['vapid_class']&&$pushHealth['sender_class'],'installed push dependency files, classes and extensions are ready');
@@ -59,6 +59,54 @@ try {
     Notifications::emit($users['agent'],'new-after-boundary',$id,'message','New alert');Notifications::read($users['agent'],$through,true);
     check(Notifications::listing($users['agent'])['unread']===1,'mark all read preserves newly arriving notifications');
     check(Notifications::listing($users['other'])['unread']===0,'notification recipient isolation');
+    // Private images: real decoder/re-encoding, ownership, binding, retry and retention.
+    $imageFile=wp_tempnam('ctai-test-image');$pixels=imagecreatetruecolor(8,8);imagepng($pixels,$imageFile);imagedestroy($pixels);
+    try {
+        file_put_contents($imageFile,'PRIVATE_TRAILING_METADATA',FILE_APPEND);
+        $clean=CrystalTap\Images::clean($imageFile,'fixture.png');
+        check($clean['mime']==='image/png'&&!str_contains(base64_decode($clean['payload']),'PRIVATE_TRAILING_METADATA'),'image processing re-encodes pixels and discards trailing content');
+        denied(fn()=>CrystalTap\Images::clean($imageFile,'fixture.php'),400,'image extension spoofing rejected');
+        file_put_contents($imageFile,str_repeat('a',CrystalTap\Images::MAX_BYTES),FILE_APPEND);
+        denied(fn()=>CrystalTap\Images::clean($imageFile,'fixture.png'),413,'oversized images rejected');
+        file_put_contents($imageFile,'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+        denied(fn()=>CrystalTap\Images::clean($imageFile,'fixture.png'),400,'SVG disguised as PNG rejected');
+    } finally {@unlink($imageFile);}
+    foreach ([['1'],[1,1],[1,2,3,4]] as $invalid)denied(fn()=>CrystalTap\Images::ids($invalid),400,'attachment IDs are bounded, numeric and unique');
+    $image=CrystalTap\Images::store($id,['kind'=>'visitor','id'=>$session],$clean,'fixtureupload1234');
+    check(CrystalTap\Images::store($id,['kind'=>'visitor','id'=>$session],$clean,'fixtureupload1234')['id']===$image['id'],'upload retries return the original private image');
+    $different=$clean;$different['checksum']=hash('sha256','different');
+    denied(fn()=>CrystalTap\Images::store($id,['kind'=>'visitor','id'=>$session],$different,'fixtureupload1234'),409,'upload retry key cannot change image bytes');
+    $message=Conversations::customer($id,'Photo for support','image-message-1234',null,[$image['id']]);
+    $retry=Conversations::customer($id,'Photo for support','image-message-1234',null,[$image['id']]);
+    check($message['message']['id']===$retry['message']['id']&&count($message['message']['attachments'])===1,'image message retries preserve one message and its attachment');
+    denied(fn()=>Conversations::customer($id,'Photo for support','image-message-1234'),409,'message retry cannot silently drop attached images');
+    $secondImageConversation=(int)Conversations::start($session)['id'];
+    denied(fn()=>Conversations::customer($secondImageConversation,'Wrong image','image-cross-1234',null,[$image['id']]),403,'images cannot be attached to another conversation');
+    check(Conversations::history($secondImageConversation)===[],'invalid image binding rolls back the entire message');
+    $visitorToken=bin2hex(random_bytes(32));$wpdb->update(DB::table('sessions'),['token_hash'=>hash('sha256',$visitorToken)],['id'=>$session]);
+    wp_set_current_user(0);$_COOKIE[Auth::COOKIE]=$visitorToken;
+    $imageResponse=req('GET','/images/'.$image['id']);
+    check($imageResponse->get_status()===200&&$imageResponse->get_headers()['Content-Type']==='image/png','own visitor can retrieve protected image with the correct content type');
+    check(!str_contains(wp_json_encode($message),$clean['payload']),'message history does not expose stored image bytes or public upload paths');
+    unset($_COOKIE[Auth::COOKIE]);check(req('GET','/images/'.$image['id'])->get_status()===401,'anonymous image retrieval is denied');
+    $otherToken=bin2hex(random_bytes(32));$wpdb->update(DB::table('sessions'),['token_hash'=>hash('sha256',$otherToken)],['id'=>$session2]);$_COOKIE[Auth::COOKIE]=$otherToken;
+    check(req('GET','/images/'.$image['id'])->get_status()===404,'another visitor cannot retrieve the image');
+    wp_set_current_user($users['other']);check(req('GET','/images/'.$image['id'])->get_status()===403,'unassigned support agent cannot retrieve the image');
+    wp_set_current_user($users['agent']);check(req('GET','/images/'.$image['id'])->get_status()===200,'assigned agent can retrieve the customer image');
+    $privateImage=CrystalTap\Images::store($id,['kind'=>'agent','id'=>$users['agent']],$clean,'privateimage1234');
+    Conversations::agentMessage($id,'Private image note','private-image-note',true,[$privateImage['id']]);
+    check(count(CrystalTap\Images::export($id))===1&&count(CrystalTap\Images::export($id,true))===2,'privacy image exports exclude internal notes while administrator exports include them');
+    wp_set_current_user(0);$_COOKIE[Auth::COOKIE]=$visitorToken;
+    check(req('GET','/images/'.$privateImage['id'])->get_status()===404,'visitor cannot retrieve an internal-note image by guessing its ID');
+    wp_set_current_user($users['agent']);unset($_COOKIE[Auth::COOKIE]);
+    $typingC=Conversations::get($id);CrystalTap\Typing::set($typingC,true,true);
+    check(CrystalTap\Typing::state(Conversations::get($id))['agent'],'agent typing indicator has a short-lived server state');
+    $wpdb->update(DB::table('conversations'),['agent_typing_until'=>gmdate('Y-m-d H:i:s',time()-1)],['id'=>$id]);
+    check(!CrystalTap\Typing::state(Conversations::get($id))['agent'],'typing indicator expires without an explicit stop request');
+    $staged=CrystalTap\Images::store($id,['kind'=>'agent','id'=>$users['agent']],$clean,'staged-cleanup-123');
+    $wpdb->update(DB::table('images'),['created_at'=>gmdate('Y-m-d H:i:s',time()-2*DAY_IN_SECONDS)],['id'=>$staged['id']]);Privacy::cleanup();
+    check(!$wpdb->get_var($wpdb->prepare('SELECT id FROM '.DB::table('images').' WHERE id=%d',$staged['id'])),'abandoned image uploads are removed by cleanup');
+    check((bool)$wpdb->get_var($wpdb->prepare('SELECT id FROM '.DB::table('images').' WHERE id=%d',$image['id'])),'cleanup preserves images attached to retained messages');
     // Contact destinations are public links, never provider credentials or forwarded messages.
     $contacts=Settings::save(['whatsapp_number'=>'+63 (912) 345-6789','messenger_url'=>'https://m.me/CrystalTapFixture','viber_number'=>'+63 912 345 6789','viber_url'=>'']);
     $links=Settings::publicConfig()['channels'];
@@ -218,6 +266,7 @@ try {
     check(Conversations::get($nested)['status']==='ai_active','nested transactions preserve outer rollback');
     wp_set_current_user($admin); Privacy::eraseConversation($id);
     check((int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.DB::table('messages').' WHERE conversation_id=%d',$id))===0,'erasure removes conversation messages');
+    check((int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.DB::table('images').' WHERE conversation_id=%d',$id))===0,'erasure removes private image bytes');
     check((int)$wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM '.DB::table('leads').' WHERE conversation_id=%d',$id))===0,'erasure removes linked lead');
     echo "\n".$GLOBALS['ctai_checks']." integration checks passed. No external AI or push service called.\n";
 } catch(Throwable $e) { echo $e->getMessage()."\n".$e->getTraceAsString()."\n"; $result=1; }

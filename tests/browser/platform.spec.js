@@ -241,3 +241,72 @@ test('a delayed visitor history response cannot replace a new chat',async({page}
   await expect(page.locator('.ctai-customer')).toContainText('New conversation marker');
   await expect(page.locator('.ctai-messages')).not.toContainText('Old conversation marker');
 });
+
+test('visitor and agent exchange private images, emoji, links and real typing indicators',async({page,browser})=>{
+  const visitor=await browser.newContext({viewport:{width:390,height:844}}),customer=await visitor.newPage();
+  const errors=[];customer.on('pageerror',e=>errors.push(e.message));page.on('pageerror',e=>errors.push(e.message));
+  try {
+    await customer.goto('http://localhost:8080/chat-demo/');
+    await customer.getByRole('button',{name:'Add emoji',exact:true}).click();
+    await customer.getByRole('button',{name:'Insert 😊',exact:true}).click();
+    const input=customer.getByRole('textbox',{name:'Message',exact:true});await expect(input).toHaveValue('😊');
+    await input.fill('Please inspect these photos 😊 https://example.com/help javascript:alert(1)');
+    await customer.getByLabel('Attach images',{exact:true}).setInputFiles(['tests/fixtures/chat-image.jpg','tests/fixtures/chat-image.png','tests/fixtures/chat-image.webp']);
+    await customer.getByRole('button',{name:'Send',exact:true}).click();
+    const bubble=customer.locator('.ctai-customer');await expect(bubble).toHaveCount(1);
+    await expect(bubble.locator('.ctai-image img')).toHaveCount(3);
+    await expect.poll(()=>bubble.locator('.ctai-image img').evaluateAll(items=>items.every(img=>img.complete&&img.naturalWidth>0))).toBe(true);
+    await expect(bubble.getByRole('link',{name:'https://example.com/help',exact:true})).toHaveAttribute('rel','noopener noreferrer');
+    await expect(bubble.locator('a[href^="javascript:"]')).toHaveCount(0);
+    await expect(customer.locator('.ctai-status')).toHaveText('Waiting for an agent');
+    const session=await customer.evaluate(async()=>await(await fetch('/wp-json/crystaltap-ai/v1/public/session')).json()),id=session.conversations[0].id;
+    const history=await customer.evaluate(async id=>await(await fetch('/wp-json/crystaltap-ai/v1/public/conversations/'+id+'/messages')).json(),id);
+    const imageId=history.messages[0].attachments[0].id;
+    const stranger=await browser.newContext();const denied=await stranger.request.get('http://localhost:8080/wp-json/crystaltap-ai/v1/images/'+imageId);expect(denied.status()).toBe(401);await stranger.close();
+    const raw=await customer.request.get('http://localhost:8080/wp-json/crystaltap-ai/v1/images/'+imageId);expect(raw.status()).toBe(200);expect(raw.headers()['content-type']).toBe('image/jpeg');expect(raw.headers()['cache-control']).toContain('no-store');
+    await signIn(page);await page.goto('/crystaltap-agent/#conversation/'+id);await page.getByRole('button',{name:'Take over',exact:true}).click();
+    await expect(page.locator('#ctai-history .ctai-image img')).toHaveCount(3);
+    await expect.poll(()=>page.locator('#ctai-history .ctai-image img').evaluateAll(items=>items.every(img=>img.complete&&img.naturalWidth>0))).toBe(true);
+    // Keep the visitor's field focused while polling from the agent view.
+    await input.fill('Customer is writing');
+    await expect(page.locator('#ctai-peer-typing')).toContainText('Customer is typing',{timeout:10000});
+    await input.fill('');
+    const reply=page.getByRole('textbox',{name:'Agent reply'});await reply.fill('Agent is writing');
+    await expect(customer.locator('.ctai-peer-typing')).toContainText('Support agent is typing',{timeout:10000});
+    await reply.fill('Here is our response 👍 https://example.com/answer');
+    await page.getByLabel('Attach images',{exact:true}).setInputFiles('tests/fixtures/chat-image.png');
+    await page.getByRole('button',{name:'Send message',exact:true}).click();
+    await expect(customer.locator('.ctai-agent .ctai-image img')).toHaveCount(1,{timeout:10000});
+    await expect(customer.locator('.ctai-agent').getByRole('link',{name:'https://example.com/answer',exact:true})).toBeVisible();
+    await page.getByRole('checkbox',{name:'Private note (team only)'}).check();
+    await page.getByLabel('Attach images',{exact:true}).setInputFiles('tests/fixtures/chat-image.webp');
+    await page.getByRole('button',{name:'Send message',exact:true}).click();
+    await expect(page.locator('.ctai-internal .ctai-image img')).toHaveCount(1);
+    const privateId=await page.evaluate(async id=>{const b=window.CTAI_APP;const h=await(await fetch(b.api+'agent/conversations/'+id,{headers:{'X-WP-Nonce':b.nonce}})).json();return h.messages.find(m=>m.visibility==='internal').attachments[0].id;},id);
+    expect((await customer.request.get('http://localhost:8080/wp-json/crystaltap-ai/v1/images/'+privateId)).status()).toBe(404);
+    await customer.reload();await expect(customer.locator('.ctai-image')).toHaveCount(4);
+    expect(errors).toEqual([]);
+  } finally {await visitor.close();}
+});
+
+test('uploaded launcher icon is saved and shown in the floating widget',async({page,browser})=>{
+  await signIn(page);await page.goto('/crystaltap-agent/#widget');
+  await expect(page.getByRole('heading',{name:'Chat widget',exact:true})).toBeVisible();
+  const old=await page.locator('[name=launcher_icon]').inputValue();const oldGreeting=await page.locator('[name=auto_greeting]').isChecked();
+  const visitor=await browser.newContext({viewport:{width:390,height:844}});
+  try {
+    await page.getByLabel('Upload chat icon',{exact:true}).setInputFiles('tests/fixtures/chat-image.png');
+    await expect(page.locator('#ctai-alert')).toContainText('Icon uploaded. Save settings');
+    await page.locator('[name=auto_greeting]').uncheck();
+    await page.getByRole('button',{name:'Save settings',exact:true}).click();await expect(page.locator('#ctai-alert')).toHaveText('Settings saved.');
+    const customer=await visitor.newPage();await customer.goto('http://localhost:8080/');
+    const launcher=customer.getByRole('button',{name:'Chat with CrystalTap',exact:true});await expect(launcher).toBeVisible();
+    await expect.poll(()=>launcher.locator('img').evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);
+    await launcher.click();await expect(customer.getByRole('textbox',{name:'Message',exact:true})).toBeVisible();
+    const bounds=await customer.evaluate(()=>{const p=document.querySelector('.ctai-panel').getBoundingClientRect(),f=document.querySelector('.ctai-composer').getBoundingClientRect();return {panel:p.bottom,composer:f.bottom,width:document.documentElement.scrollWidth,viewport:innerWidth};});
+    expect(bounds.composer).toBeLessThanOrEqual(bounds.panel+1);expect(bounds.width).toBeLessThanOrEqual(bounds.viewport);
+    await customer.setViewportSize({width:320,height:500});await customer.getByRole('textbox',{name:'Message',exact:true}).scrollIntoViewIfNeeded();await expect(customer.getByRole('textbox',{name:'Message',exact:true})).toBeInViewport();
+  } finally {
+    await visitor.close();await page.evaluate(async data=>{const b=window.CTAI_APP;const r=await fetch(b.api+'admin/settings',{method:'PUT',headers:{'Content-Type':'application/json','X-WP-Nonce':b.nonce},body:JSON.stringify(data)});if(!r.ok)throw new Error('Could not restore icon fixture');},{launcher_icon:old,auto_greeting:oldGreeting});
+  }
+});

@@ -110,3 +110,13 @@ Version 0.1.4 adds public contacts under Business Information. Use your own inte
 Verify each destination on the intended Android/iPhone/desktop device. Viber phone deep links require the installed app. Messenger/WhatsApp use their supported website/app handoff. Messages and notifications after handoff belong to those platforms; CrystalTap's queue, bell and push apply to its website conversations. No website message text or customer identity is added to the destination links.
 
 A unified inbox would additionally need approved business APIs, signed/idempotent webhooks, account verification, outbound delivery/status tracking, applicable messaging-window/template rules and secure credential configuration. Contact buttons do not establish those integrations.
+
+## Private image uploads and typing (0.1.5)
+
+Enable PHP GD with JPEG, PNG and WebP support. Environment health reports `image_upload_ready` and the host-adjusted `image_upload_limit_bytes`. The app caps files at 2 MB, up to three per message, 20 per conversation; it rejects more than 20 million pixels or a dimension above 10,000 px. Stored output is resized to a maximum 2,400 px and re-encoded; original metadata is not retained. Hosting `upload_max_filesize` / `post_max_size` must permit the intended multipart request. Icon uploads use the administrator's WordPress media permission; customer photos use the private plugin image table.
+
+The new `images` table contains base64 image bytes. Back it up and include its storage in capacity/retention planning. Full conversation erasure removes images atomically. Daily cleanup removes unused uploads older than a day. WordPress privacy exports include public images; administrator conversation exports can include internal images. Those exports and backups contain customer data and need the same access controls as messages.
+
+Exclude authenticated image REST responses from CDN/browser caching. Binary downloads use the visitor cookie or authenticated agent fetch, not public media URLs or bearer tokens in URLs. Do not replace this with public upload links. Image messages request human review; they are not forwarded to the AI.
+
+Typing stores only short expiry timestamps, not draft text. Clients report changes with throttling and poll peer status while visible. The eight-second expiry prevents stale activity after disconnect; state changes and successful sends clear it. Private-note typing is suppressed. Typing adds small authenticated requests and must be included in load testing.

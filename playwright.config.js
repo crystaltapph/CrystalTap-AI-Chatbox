@@ -1,5 +1,6 @@
 const { defineConfig } = require('@playwright/test');
 module.exports = defineConfig({
+  globalSetup: './tests/browser/global-setup.js',
   testDir: './tests/browser',
   workers: 1,
   timeout: 45000,

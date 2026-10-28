@@ -1,6 +1,6 @@
 # Development candidate status
 
-Version 0.1.4 is a development candidate. The live website has not been modified by this update, and live OpenAI/push behavior has not been certified.
+Version 0.1.5 is a development candidate. The live website has not been modified by this update, and live OpenAI/push behavior has not been certified.
 
 ## Implemented
 
@@ -18,9 +18,9 @@ Version 0.1.4 is a development candidate. The live website has not been modified
 
 The current development target is WordPress 7.1.3 / PHP 8.3 / MariaDB 10.11 and system Chromium on Linux.
 
-- 88 backend integration assertions: migrations, visitor isolation, capabilities, message/notification deduplication, private-note isolation, ownership, state transitions, encryption, SSE decoding, approved retrieval, lead consent, budgets, provider orchestration, streaming callbacks, summaries, takeover fencing, nested rollback and erasure.
+- 114 backend integration assertions: migrations, visitor isolation, capabilities, message/notification deduplication, private-note isolation, ownership, state transitions, encryption, SSE decoding, approved retrieval, lead consent, budgets, provider orchestration, streaming callbacks, summaries, takeover fencing, nested rollback and erasure.
 - Three real competing-process/database scenarios: one claim winner, bounded concurrent budget reservations, and one persisted message for competing duplicate submissions.
-- Eleven browser/API workflows: customer continuation/isolation/handoff; agent replies and private notes; mobile layout/bell/content/settings; explicit audio unlock, new-alert chimes and muting; public contact settings and mobile links; delayed agent responses; draft retention during send; visitor-session recovery; persistent update prompt; delayed visitor history; SSE fallback plus CSRF/origin rejection and blocked development-file access.
+- Thirteen browser/API workflows: customer continuation/isolation/handoff; agent replies and private notes; mobile layout/bell/content/settings; explicit audio unlock, new-alert chimes and muting; public contact settings and mobile links; delayed agent responses; draft retention during send; visitor-session recovery; persistent update prompt; delayed visitor history; SSE fallback plus CSRF/origin rejection and blocked development-file access.
 - PHP and JavaScript syntax checks; repeat installation/startup; release ZIP integrity and excluded-file checks.
 
 Deterministic AI tests use a provider substitute and do not prove live API compatibility, answer quality or provider billing. SSE tests validate local transport/decoding and fallback, not live proxy chunk timing. Chromium's phone-sized viewport does not establish physical iPhone/Android behavior.
@@ -40,7 +40,7 @@ Deterministic AI tests use a provider substitute and do not prove live API compa
 
 ## Scope and operational limits
 
-Single-site only. No payment processing, checkout, attachments or offline message queue. Polling is not instant transport. Push is best-effort. Keyword retrieval needs indexed search work/load validation for large catalogs. Model capability hints require confirmation against the actual selected model. Agent enrollment uses WordPress user management. Metrics are operational summaries; official provider billing is separate. A setup checklist is provided rather than claiming an independently verified production onboarding wizard.
+Single-site only. No payment processing, checkout, non-image attachments or offline message queue. Polling is not instant transport. Push is best-effort. Keyword retrieval needs indexed search work/load validation for large catalogs. Model capability hints require confirmation against the actual selected model. Agent enrollment uses WordPress user management. Metrics are operational summaries; official provider billing is separate. A setup checklist is provided rather than claiming an independently verified production onboarding wizard.
 
 Production release remains gated by the evidence above. Do not label all original acceptance criteria passed based solely on this local candidate.
 
@@ -67,3 +67,13 @@ WhatsApp, Messenger and Viber are configurable public contact links. Phone numbe
 The review fixed stale agent view/history responses overwriting another conversation, visitor history responses restoring an old conversation after New chat, newer agent drafts being cleared by a completed send, expired visitor sessions requiring a reload, missing immediate queue alerts after Reopen, and app updates already waiting or hidden by ordinary status messages. Settings types now follow schema defaults, keeping numeric contact strings stable across saves.
 
 Automated checks cover these regressions and existing chat/permissions/AI orchestration/push flows. `npm audit` reported zero known advisories for the locked JavaScript dependencies during this review. The Composer audit could not retrieve PHP advisories because network policy blocked `packagist.org`; PHP vulnerability status remains unverified. Production dependency versions were not changed. Physical app handoffs, customer accounts, live OpenAI/push, Namecheap cron and the actual site's theme/plugin interactions still require deployment testing.
+
+## 0.1.5 chat enhancements
+
+Implemented launcher icon upload/configuration, basic emoji selection, safe HTTP(S) link rendering in customer/agent history, real short-lived peer typing and AI thinking states, and private image attachments for both visitors and agents (including internal notes). Shared UI helpers load in WordPress and the scoped agent app. Blob URLs and typing listeners/timers are cleaned when their views disappear.
+
+The additive migration creates an eighteenth table (`images`) and typing-expiry columns; init runs the version check so an updated visitor app does not depend on an administrator visiting first. Image access checks session/conversation ownership or agent assignment/capabilities; internal and staged images have separate restrictions. Files are MIME/extension checked, capped by bytes/pixels/count and re-encoded using WordPress's GD editor. Anonymous image uploads are additionally rate-limited by IP. No customer images enter the public media library. Retries preserve upload/message identity, and failed binding rolls back the message.
+
+Local checks include real multipart JPG/PNG/WebP exchange, protected binary retrieval, visitor/agent isolation, private-note images, emoji and safe links, both peer typing directions, real admin media upload and a phone-sized floating launcher. Backend checks cover spoofed/oversized images, retry conflicts, cross-conversation binding, stale typing, export visibility and image erasure/cleanup. AI remains text-only; photo messages enter human support.
+
+Physical-phone file selection, the live host's GD/WebP and PHP upload limits, real-time performance at production load and existing theme/CDN behavior still need site testing. No live site or phone sound configuration is changed by this update.

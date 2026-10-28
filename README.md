@@ -6,7 +6,7 @@ No Chatway, RO Shop, WooCommerce, theme, external database, or hosted messaging 
 
 ## Install on WordPress
 
-Use the packaged `crystaltap-ai-chatbox-0.1.4.zip`, which includes production dependencies. Starting with **0.1.2**, GitHub → Code → Download ZIP also includes the production libraries. Older GitHub source archives omitted them. Check `plugin_version` and `push_diagnostic` under CrystalTap Settings → Environment health when diagnosing an installation. To build an installable package from source, follow the development and packaging commands below.
+Use the packaged `crystaltap-ai-chatbox-0.1.5.zip`, which includes production dependencies. Starting with **0.1.2**, GitHub → Code → Download ZIP also includes the production libraries. Older GitHub source archives omitted them. Check `plugin_version` and `push_diagnostic` under CrystalTap Settings → Environment health when diagnosing an installation. To build an installable package from source, follow the development and packaging commands below.
 
 If the source archive is already installed, back up the site, deactivate that copy, then upload and activate the packaged plugin. Accept WordPress's replacement prompt when offered. If WordPress creates a separate entry because the source folder has a different name, leave the source copy deactivated; keep only one CrystalTap copy active. Plugin-owned settings and tables are retained on deactivation.
 
@@ -35,7 +35,7 @@ python3 tests/concurrency.py
 npm test
 ```
 
-Browser tests use system Chromium when available. Otherwise run `npx playwright install --with-deps chromium`; `CTAI_CHROMIUM` can select a browser executable. Integration and race tests create disposable plugin tables and temporary WordPress users. Browser tests create clearly labeled development conversations. Run these tests only on the local development stack, never against production.
+Browser tests require the local development URL and reset only its test throttling counters before a run. Browser tests use system Chromium when available. Otherwise run `npx playwright install --with-deps chromium`; `CTAI_CHROMIUM` can select a browser executable. Integration and race tests create disposable plugin tables and temporary WordPress users. Browser tests create clearly labeled development conversations. Run these tests only on the local development stack, never against production.
 
 ```sh
 python3 scripts/release.py
@@ -80,3 +80,13 @@ In CrystalTap AI → Business Information, enter your WhatsApp number (including
 These buttons open the relevant messaging app or website. Replies are handled in that service. CrystalTap website messages and history are not automatically transferred, and messages from those services do not appear in the CrystalTap agent inbox. Viber phone links need the Viber app installed. No additional provider API key is needed for contact buttons. Account ownership and app availability must be verified on your devices.
 
 Two-way inbox integration is a separate setup requiring the platforms' business accounts/API approvals, secure server credentials, verified webhooks and messaging-policy handling. No such accounts are provisioned by this plugin.
+
+## Chat icons, typing, emoji, links and images
+
+Version 0.1.5 includes a built-in chat-bubble launcher icon. In Chat Widget settings, upload a JPG/PNG/WebP icon or enter its HTTPS URL, then Save settings. The header logo remains separately configurable.
+
+Customer and agent composers have a basic emoji picker and image selection. HTTP/HTTPS URLs in messages become clickable links; HTML is displayed as text. Customer/agent typing indicators appear while activity is reported and expire automatically. Private-note typing is not shown to customers. The AI thinking indicator appears while an AI request is in progress.
+
+Attach up to three JPG/PNG/WebP images per message, 2 MB per image and 20 images per conversation. PHP GD with support for those formats is required; hosting limits may be smaller. Images are decoded/re-encoded and stored privately in the plugin database, outside the public WordPress Media Library. Original image metadata is discarded. Readers must pass conversation authorization on every download. Images in private notes stay private.
+
+Customer image messages enter the human support queue. Image contents are not sent to OpenAI or analyzed by the AI. Conversation retention/erasure also removes images; unused staged uploads expire during daily cleanup. Backups must include the plugin image table.

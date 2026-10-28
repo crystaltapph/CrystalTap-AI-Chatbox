@@ -28,7 +28,7 @@ final class Plugin {
         add_filter('cron_schedules', static function ($s) { $s['ctai_minute'] = ['interval' => 60, 'display' => 'Every minute']; return $s; });
         add_action('init', [self::class, 'rewrite']);
         add_action('init', [self::class, 'ensureSchedule']);
-        add_action('admin_init', static function () { if (current_user_can('ctai_manage') && get_option('ctai_schema') !== CTAI_VERSION) { DB::migrate(); } });
+        add_action('init', static function () { if (get_option('ctai_schema') !== CTAI_VERSION) { DB::migrate(); } });
         add_action('rest_api_init', [API::class, 'register']);
         add_filter('rest_post_dispatch', static function ($response, $server, $request) {
             if (str_starts_with($request->get_route(), '/crystaltap-ai/v1/')) { $response->header('Cache-Control', 'no-store, private, max-age=0'); $response->header('Vary', 'Cookie, Origin'); }
@@ -80,12 +80,14 @@ final class Plugin {
     }
     private static function appAssets(): void {
         wp_enqueue_style('ctai-app', plugins_url('assets/app.css', CTAI_FILE), [], CTAI_VERSION);
-        wp_enqueue_script('ctai-app', plugins_url('assets/app.js', CTAI_FILE), [], CTAI_VERSION, true);
+        wp_enqueue_script('ctai-chat-ui', plugins_url('assets/chat-ui.js', CTAI_FILE), [], CTAI_VERSION, true);
+        wp_enqueue_script('ctai-app', plugins_url('assets/app.js', CTAI_FILE), ['ctai-chat-ui'], CTAI_VERSION, true);
         wp_add_inline_script('ctai-app', 'window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';', 'before');
     }
     private static function widgetAssets(): void {
         wp_enqueue_style('ctai-widget', plugins_url('assets/widget.css', CTAI_FILE), [], CTAI_VERSION);
-        wp_enqueue_script('ctai-widget', plugins_url('assets/widget.js', CTAI_FILE), [], CTAI_VERSION, true);
+        wp_enqueue_script('ctai-chat-ui', plugins_url('assets/chat-ui.js', CTAI_FILE), [], CTAI_VERSION, true);
+        wp_enqueue_script('ctai-widget', plugins_url('assets/widget.js', CTAI_FILE), ['ctai-chat-ui'], CTAI_VERSION, true);
         wp_add_inline_script('ctai-widget', 'window.CTAI_WIDGET=' . wp_json_encode(['api' => rest_url('crystaltap-ai/v1/'), 'config' => Settings::publicConfig(), 'autoGreeting' => Settings::get()['auto_greeting']], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';', 'before');
     }
     public static function menus(): void {
@@ -117,7 +119,7 @@ final class Plugin {
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: SAMEORIGIN');
         header('Referrer-Policy: same-origin');
-        echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#087f83"><meta name="apple-mobile-web-app-capable" content="yes"><title>CrystalTap Agent</title><link rel="manifest" href="' . esc_url(home_url('/crystaltap-agent/manifest.webmanifest')) . '"><link rel="apple-touch-icon" href="' . esc_url(plugins_url('assets/icon-192.png', CTAI_FILE)) . '"><link rel="stylesheet" href="' . esc_url(plugins_url('assets/app.css?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></head><body><div id="ctai-app" class="ctai-app ctai-mobile"></div><script>window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script><script src="' . esc_url(plugins_url('assets/app.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script></body></html>';
+        echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#087f83"><meta name="apple-mobile-web-app-capable" content="yes"><title>CrystalTap Agent</title><link rel="manifest" href="' . esc_url(home_url('/crystaltap-agent/manifest.webmanifest')) . '"><link rel="apple-touch-icon" href="' . esc_url(plugins_url('assets/icon-192.png', CTAI_FILE)) . '"><link rel="stylesheet" href="' . esc_url(plugins_url('assets/app.css?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></head><body><div id="ctai-app" class="ctai-app ctai-mobile"></div><script>window.CTAI_APP=' . wp_json_encode(self::bootstrap(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ';</script><script src="' . esc_url(plugins_url('assets/chat-ui.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script><script src="' . esc_url(plugins_url('assets/app.js?ver=' . CTAI_VERSION, CTAI_FILE)) . '"></script></body></html>';
         exit;
     }
 }

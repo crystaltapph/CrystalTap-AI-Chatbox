@@ -4,7 +4,7 @@ Tags: customer-support, chatbot, live-chat, pwa
 Requires at least: 6.6
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.1.4
+Stable tag: 0.1.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -44,12 +44,15 @@ Use privacy tools and an approved retention policy. Deactivation/uninstall prese
 
 == Known limitations ==
 
-Single-site WordPress only. No offline sends or attachments. Polling is not instant delivery.
+Single-site WordPress only. No offline sends. Image attachments require PHP GD and obey size/rate limits. Polling is not instant delivery.
 AI streaming is opt-in and depends on hosting/proxy buffering. Background summaries require a functioning scheduler.
 Browser/OS installation and push support vary. Physical-device testing is required before release.
 WP-Cron alone does not guarantee timely escalation. Local costs are estimates, not provider invoices.
 
 == Changelog ==
+
+= 0.1.5 =
+Add a built-in/uploadable chat launcher icon, real customer/agent typing indicators, a basic emoji picker, safe clickable HTTP(S) links and private JPG/PNG/WebP chat attachments. Image messages go to human support; image bytes are not sent to OpenAI.
 
 = 0.1.4 =
 Add configurable WhatsApp, Messenger and Viber contact buttons. Fix stale conversation responses, draft loss during sends, expired visitor session recovery, reopened queue alerts and persistent app-update prompts.

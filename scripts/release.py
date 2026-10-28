@@ -10,7 +10,7 @@ if not (root/'vendor/autoload.php').is_file():
     raise SystemExit('Install locked Composer production dependencies before packaging.')
 out=root/'dist'
 out.mkdir(exist_ok=True)
-target=out/'crystaltap-ai-chatbox-0.1.4.zip'
+target=out/'crystaltap-ai-chatbox-0.1.5.zip'
 files=[root/p for p in ['crystaltap-ai-chatbox.php','uninstall.php','readme.txt','LICENSE','.htaccess']]
 for directory in ['includes','assets','mobile','vendor']:
     for path in (root/directory).rglob('*'):

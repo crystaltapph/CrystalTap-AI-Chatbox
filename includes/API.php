@@ -32,7 +32,19 @@ final class API {
         return $body;
     }
     public static function register(): void {
-        add_filter('rest_pre_serve_request', static fn($served) => self::$streamed || $served);
+        add_filter('rest_pre_serve_request', static function ($served,$response,$request) {
+            if (str_starts_with($request->get_route(),'/crystaltap-ai/v1/images/') && $response->get_status() === 200 && is_string($response->get_data())) { echo $response->get_data(); return true; }
+            return self::$streamed || $served;
+        },10,3);
+        self::route('/images/(?P<id>\\d+)', 'GET', static function ($r) {
+            $image = Images::read((int)$r['id']);
+            $response = new \WP_REST_Response(base64_decode($image['payload'],true));
+            $response->header('Content-Type',$image['mime']);
+            $response->header('Content-Disposition','inline; filename="chat-image-'.$image['id'].'.'.(['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp'][$image['mime']]).'"');
+            $response->header('Content-Security-Policy',"default-src 'none'; sandbox");
+            $response->header('Referrer-Policy','no-referrer');
+            return $response;
+        }, 'public');
         self::route('/public/session', 'GET', static function () {
             global $wpdb;
             $s = Auth::session(true);
@@ -45,21 +57,21 @@ final class API {
         self::route('/public/conversations', 'POST', static fn($r) => Conversations::start((int) Auth::visitor($r)['id']), 'visitor');
         self::route('/public/conversations/(?P<id>\d+)/messages', 'GET', static function ($r) {
             $c = Conversations::owned((int) $r['id'], (int) Auth::visitor($r)['id']);
-            return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after']))];
+            return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after'])), 'typing'=>Typing::state($c)];
         }, 'visitor');
         self::route('/public/conversations/(?P<id>\d+)/messages', 'POST', static function ($r) {
             Conversations::owned((int) $r['id'], (int) Auth::visitor($r)['id']); $b = self::input($r);
-            return Conversations::customer((int) $r['id'], Auth::text($b['content'] ?? ''), Auth::key($b['key'] ?? ''));
+            return Conversations::customer((int) $r['id'], Images::text($b), Auth::key($b['key'] ?? ''), null, Images::ids($b['attachments'] ?? []));
         }, 'visitor');
         self::route('/public/conversations/(?P<id>\d+)/stream', 'POST', static function ($r) {
             Conversations::owned((int) $r['id'], (int) Auth::visitor($r)['id']); $b = self::input($r);
-            $text = Auth::text($b['content'] ?? ''); $key = Auth::key($b['key'] ?? '');
+            $text = Images::text($b); $attachments = Images::ids($b['attachments'] ?? []); $key = Auth::key($b['key'] ?? '');
             self::$streamed = true;
             header('Content-Type: text/event-stream; charset=utf-8'); header('Cache-Control: no-store'); header('X-Accel-Buffering: no');
             $emit = static function ($type, $data) { echo 'event: ' . $type . "\ndata: " . wp_json_encode($data) . "\n\n"; if (ob_get_level()) { @ob_flush(); } flush(); };
             $emit('accepted', ['processing' => true]);
             try {
-                $result = Conversations::customer((int) $r['id'], $text, $key, static fn($text) => $emit('delta', ['text' => $text]));
+                $result = Conversations::customer((int) $r['id'], $text, $key, static fn($text) => $emit('delta', ['text' => $text]), $attachments);
                 $emit('complete', $result);
             } catch (\Throwable $e) { $emit('error', ['message' => $e instanceof Fault ? $e->getMessage() : 'The response was interrupted. Retry the same message to check its status.']); }
             return null;
@@ -70,15 +82,31 @@ final class API {
         self::route('/public/conversations/(?P<id>\d+)/lead', 'POST', static function ($r) {
             Conversations::owned((int) $r['id'], (int) Auth::visitor($r)['id']); Auth::rate('lead', 5, 3600); return Leads::capture((int) $r['id'], self::input($r));
         }, 'visitor');
+        self::route('/public/conversations/(?P<id>\d+)/images', 'POST', static function ($r) {
+            $session=Auth::visitor($r);$c=Conversations::owned((int)$r['id'],(int)$session['id']);
+            return Images::upload($c,['kind'=>'visitor','id'=>(int)$session['id']],$r->get_file_params()['image'] ?? [],Auth::key((string)$r->get_param('key')));
+        }, 'visitor');
+        self::route('/agent/conversations/(?P<id>\d+)/images', 'POST', static function ($r) {
+            $c=Conversations::get((int)$r['id']);Auth::scope($c);
+            return Images::upload($c,['kind'=>'agent','id'=>get_current_user_id()],$r->get_file_params()['image'] ?? [],Auth::key((string)$r->get_param('key')));
+        });
+        self::route('/public/conversations/(?P<id>\d+)/typing', 'GET,POST', static function ($r) {
+            $c=Conversations::owned((int)$r['id'],(int)Auth::visitor($r)['id']);if($r->get_method()==='GET')return Typing::state($c);$b=self::input($r);
+            Auth::rate('typing',60,60,'visitor:'.$c['session_id']);return Typing::set($c,false,($b['active'] ?? false) === true);
+        },'visitor');
+        self::route('/agent/conversations/(?P<id>\d+)/typing', 'GET,POST', static function ($r) {
+            $c=Conversations::get((int)$r['id']);Auth::scope($c);if($r->get_method()==='GET')return Typing::state($c);$b=self::input($r);
+            Auth::rate('typing',60,60,'agent:'.get_current_user_id());return Typing::set($c,true,($b['active'] ?? false) === true);
+        });
         self::route('/agent/bootstrap', 'GET', static fn() => Plugin::bootstrap());
         self::route('/agent/conversations', 'GET', static fn($r) => Conversations::inbox((string) ($r['filter'] ?? 'all'), max(1, (int) $r['page']), sanitize_text_field((string) ($r['search'] ?? ''))));
         self::route('/agent/conversations/(?P<id>\d+)', 'GET', static function ($r) {
             global $wpdb;
             $c = Conversations::get((int) $r['id']); Auth::scope($c);
             $customer = $wpdb->get_row($wpdb->prepare('SELECT name,email,phone,location,interest,water_source FROM ' . DB::table('leads') . ' WHERE conversation_id=%d', $r['id']), ARRAY_A);
-            return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after']), true), 'customer' => $customer];
+            return ['conversation' => Conversations::view($c), 'messages' => Conversations::history((int) $r['id'], max(0, (int) $r['after']), true), 'customer' => $customer, 'typing'=>Typing::state($c)];
         });
-        self::route('/agent/conversations/(?P<id>\d+)/messages', 'POST', static function ($r) { $b = self::input($r); Auth::rate('agent_send', 60, 60, (string) get_current_user_id()); return Conversations::agentMessage((int) $r['id'], Auth::text($b['content'] ?? ''), Auth::key($b['key'] ?? ''), !empty($b['internal'])); });
+        self::route('/agent/conversations/(?P<id>\d+)/messages', 'POST', static function ($r) { $b = self::input($r); Auth::rate('agent_send', 60, 60, (string) get_current_user_id()); return Conversations::agentMessage((int) $r['id'], Images::text($b), Auth::key($b['key'] ?? ''), !empty($b['internal']), Images::ids($b['attachments'] ?? [])); });
         self::route('/agent/conversations/(?P<id>\d+)/actions/(?P<action>[a-z-]+)', 'POST', static function ($r) { $b = self::input($r); return Conversations::action((int) $r['id'], $r['action'], (int) ($b['version'] ?? 0), (int) ($b['agent'] ?? 0)); });
         self::route('/agent/conversations/(?P<id>\d+)/read', 'PUT', static function ($r) {
             global $wpdb; $c = Conversations::get((int) $r['id']); Auth::scope($c); $b = self::input($r);
@@ -148,7 +176,7 @@ final class API {
         }, 'supervise');
         self::route('/admin/health', 'GET', static function () {
             $push = Dependencies::pushStatus();
-            return ['plugin_version' => CTAI_VERSION, 'plugin_directory' => basename(CTAI_DIR), 'https' => is_ssl(), 'openai_key_configured' => (bool) Settings::secret('openai_key'), 'vapid_private_configured' => (bool) Settings::secret('vapid_private'), 'push_library' => $push['sender_class'], 'push_vapid_class' => $push['vapid_class'], 'push_ready' => $push['ready'], 'push_diagnostic' => $push['issue'], 'push_missing_extensions' => implode(', ', $push['missing_extensions']) ?: 'None', 'last_worker' => (int) get_option('ctai_last_tick'), 'schema' => get_option('ctai_schema'), 'php' => PHP_VERSION, 'cron_note' => 'Configure a real cron every minute for timely notifications.'];
+            return ['image_upload_ready'=>extension_loaded('gd') && function_exists('imagewebp'),'image_upload_limit_bytes'=>min(Images::MAX_BYTES,wp_max_upload_size()),'plugin_version' => CTAI_VERSION, 'plugin_directory' => basename(CTAI_DIR), 'https' => is_ssl(), 'openai_key_configured' => (bool) Settings::secret('openai_key'), 'vapid_private_configured' => (bool) Settings::secret('vapid_private'), 'push_library' => $push['sender_class'], 'push_vapid_class' => $push['vapid_class'], 'push_ready' => $push['ready'], 'push_diagnostic' => $push['issue'], 'push_missing_extensions' => implode(', ', $push['missing_extensions']) ?: 'None', 'last_worker' => (int) get_option('ctai_last_tick'), 'schema' => get_option('ctai_schema'), 'php' => PHP_VERSION, 'cron_note' => 'Configure a real cron every minute for timely notifications.'];
         }, 'manage');
         self::route('/admin/credentials', 'PUT', static function ($r) {
             if (!is_ssl() && !in_array(wp_parse_url(home_url(), PHP_URL_HOST), ['localhost','127.0.0.1'], true)) { throw new Fault('HTTPS is required', 403); }
@@ -186,7 +214,7 @@ final class API {
         self::route('/admin/conversations/(?P<id>\d+)', 'DELETE', static function ($r) { Privacy::eraseConversation((int) $r['id']); return ['deleted' => true]; }, 'manage');
         self::route('/admin/conversations/(?P<id>\d+)/export', 'GET', static function ($r) {
             global $wpdb; DB::audit('conversation_exported', (int) $r['id']);
-            return ['conversation' => Conversations::view(Conversations::get((int) $r['id'])), 'messages' => $wpdb->get_results($wpdb->prepare('SELECT seq,sender,visibility,content,created_at FROM ' . DB::table('messages') . ' WHERE conversation_id=%d ORDER BY seq', $r['id']), ARRAY_A)];
+            return ['images'=>Images::export((int)$r['id'],true),'conversation' => Conversations::view(Conversations::get((int) $r['id'])), 'messages' => $wpdb->get_results($wpdb->prepare('SELECT seq,sender,visibility,content,created_at FROM ' . DB::table('messages') . ' WHERE conversation_id=%d ORDER BY seq', $r['id']), ARRAY_A)];
         }, 'manage');
     }
     public static function logs(): array { global $wpdb; return ['audit' => $wpdb->get_results('SELECT * FROM ' . DB::table('audit_log') . ' ORDER BY id DESC LIMIT 100', ARRAY_A), 'usage' => $wpdb->get_results('SELECT * FROM ' . DB::table('usage') . ' ORDER BY id DESC LIMIT 100', ARRAY_A)]; }
